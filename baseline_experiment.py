@@ -51,17 +51,59 @@ def baseline_experiment(dataset):
     quantifier_params = {
         "params1" : {
             "model_C" : 1e-2
+        },
+        "params2" : {
+            "model_C" : 5e-2
+        },
+        "params3" : {
+            "model_C" : 1e-1
+        },
+        "params4" : {
+            "model_C" : 5e-1
+         },
+        "params5" : {
+            "model_C" : 1e0
+        },
+        "params6" : {
+            "model_C" : 5e0
+        },
+        "params7" : {
+            "model_C" : 1e1
+        },
+        "params8" : {
+            "model_C" : 5e1
+        },
+        "params9" : {
+            "model_C" : 1e2
+        },
+        "params10" : {
+            "model_C" : 5e2
+        },
+        "params11" : {
+            "model_C" : 1e3
         }
-        #, "params2" : {
-        #     "model_C" : 1e0
-        # }
     }
+
+    # quantifier parameters for testing:
+    #quantifier_params = {
+    #    "params1" : {
+    #        "model_C" : 1e-2
+    #    }
+    #}
 
 
     results = []
     # test the model on all percentual instance fractions
-    #for i in [0,1,2]:
-    for i in [0]:
+
+    # run the model on one quantification method
+    #for i in [0]:
+    # run the model with all quantification methods
+    for i in [0,1,2]:
+        match i:
+            case 0: quant_filename = filename + "_ACC.csv"
+            case 1: quant_filename = filename + "_PACC.csv"
+            case 2: quant_filename = filename + "_SLD.csv"
+            case _: raise ValueError("Error while iterating quantifiers.")
         for z, params in quantifier_params.items():
             # define the used quantifier for each run
             match i:
@@ -98,12 +140,12 @@ def baseline_experiment(dataset):
                     "kld": qp.error.kld(p_est, p_i)
                 })
 
-    results = pd.DataFrame(results)
+        results = pd.DataFrame(results)
 
-    results["mae"] = qp.error.mae(results["p_est"], results["p_val"])
-    results["mrae"] = qp.error.mrae(results["p_est"], results["p_val"])
+        results["mae"] = qp.error.mae(results["p_est"], results["p_val"])
+        results["mrae"] = qp.error.mrae(results["p_est"], results["p_val"])
 
-    results.to_csv(filename)
+        results.to_csv(quant_filename)
     
     # report the desired attributes
     return results.head()
