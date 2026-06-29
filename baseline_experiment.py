@@ -3,6 +3,8 @@ import jax.numpy as jnp
 import pandas as pd
 import argparse
 import time
+import itertools
+import numpy as np
 
 import qunfold as qu
 import quapy as qp
@@ -17,7 +19,7 @@ def prepare_dataset(dataset):
     # load the dataset
     if(type(dataset) == tuple):
         name, task = dataset
-        fetch = getattr(qp.datasets, "fetch_"+name)
+        fetch = getattr(qp.datasets, "fetch_" + name)
         training, val_generator, test_generator = fetch(task=task)
         match name:
             case "lequa2022" : qp.environ["SAMPLE_SIZE"] = LEQUA2022_SAMPLE_SIZE[task]
@@ -25,7 +27,7 @@ def prepare_dataset(dataset):
     else:
         name = dataset
         task = None
-        fetch = getattr(qp.datasets, "fetch_"+name)
+        fetch = getattr(qp.datasets, "fetch_" + name)
         training, val_generator, test_generator = fetch()
     
     # split the set into training, validation and test subsets
@@ -34,7 +36,7 @@ def prepare_dataset(dataset):
 
 
 # Function for a given experiment
-def baseline_experiment(dataset):
+def baseline_experiment(dataset, test=False):
     if(type(dataset) == tuple):
         name, task = dataset
         name = name + "_" + task
@@ -48,41 +50,10 @@ def baseline_experiment(dataset):
 
     # Define the quantifier/classifier parameters
     # parameters of the type: C, 
-    quantifier_params = {
-        "params1" : {
-            "model_C" : 1e-2
-        },
-        "params2" : {
-            "model_C" : 5e-2
-        },
-        "params3" : {
-            "model_C" : 1e-1
-        },
-        "params4" : {
-            "model_C" : 5e-1
-         },
-        "params5" : {
-            "model_C" : 1e0
-        },
-        "params6" : {
-            "model_C" : 5e0
-        },
-        "params7" : {
-            "model_C" : 1e1
-        },
-        "params8" : {
-            "model_C" : 5e1
-        },
-        "params9" : {
-            "model_C" : 1e2
-        },
-        "params10" : {
-            "model_C" : 5e2
-        },
-        "params11" : {
-            "model_C" : 1e3
-        }
-    }
+    model_C = np.geomspace(1e-3, 1e2, 6 if test else 21)
+    class_w = [None, "balanced"]
+
+    quantifier_params = list(itertools.product(model_C, class_w))
 
     # quantifier parameters for testing:
     #quantifier_params = {
@@ -91,31 +62,32 @@ def baseline_experiment(dataset):
     #    }
     #}
 
-
     results = []
+
     # test the model on all percentual instance fractions
 
     # run the model on one quantification method
     #for i in [0]:
     # run the model with all quantification methods
     for i in [0,1,2]:
-        match i:
-            case 0: quant_filename = filename + "_ACC.csv"
-            case 1: quant_filename = filename + "_PACC.csv"
-            case 2: quant_filename = filename + "_SLD.csv"
-            case _: raise ValueError("Error while iterating quantifiers.")
-        for z, params in quantifier_params.items():
+  
+        for model_C, class_we in quantifier_params:
+
             # define the used quantifier for each run
             match i:
-                case 0: model = ACC(LogisticRegression(C=params["model_C"]))
-                case 1: model = PACC(LogisticRegression(C=params["model_C"]))
-                case 2: model = SLD(LogisticRegression(C=params["model_C"]))
+                case 0: 
+                    model = ACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000))
+                    model_name = "ACC"
+                case 1:
+                    model = PACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000))
+                    model_name="PACC"
+                case 2:
+                    model = SLD(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000))
+                    model_name="SLD"
                 case _: raise ValueError("Error while iterating quantifiers.")
             
             print("Training the quantifier: " + str(model))
-            print("With parameters:")
-            for key, value in params.items():
-                print(f"{key}:{value}")
+            print(f"With parameters: C={model_C}, class_weight={class_we}")
             
             # train the quantifier
             t_train_begin = time.time()
@@ -125,27 +97,25 @@ def baseline_experiment(dataset):
             print("Training took: " + str(t_train))
 
             # evaluate the quantifier
-            for X_i, p_i in val():
+            for test_run, (X_i, p_i) in enumerate(val()):
                 t0 = time.time()
                 p_est = trained_quantifier.predict(X_i)
                 t_est = time.time() - t0
                 results.append({
-                    "quantifier": model,
-                    "params": params,
+                    "quantifier": model_name,
+                    "C": model_C,
+                    "class_weight": class_we,
                     "p_est": p_est,
                     "p_val": p_i,
                     "t_est": t_est,
-                    "ae": qp.error.ae(p_est, p_i),
-                    "rae": qp.error.rae(p_est, p_i),
-                    "kld": qp.error.kld(p_est, p_i)
+                    "t_train": t_train
                 })
+                if test and test_run >= 100:
+                    break
 
-        results = pd.DataFrame(results)
 
-        results["mae"] = qp.error.mae(results["p_est"], results["p_val"])
-        results["mrae"] = qp.error.mrae(results["p_est"], results["p_val"])
-
-        results.to_csv(quant_filename)
+    results = pd.DataFrame(results)
+    results.to_csv(filename)
     
     # report the desired attributes
     return results.head()
@@ -159,6 +129,7 @@ if __name__ == "__main__":
                     epilog='see other resources')
     parser.add_argument("dataset_name", help="dataset which is fetched from quapy", type=str)
     parser.add_argument("-t", "--task", help="name of the task of a given dataset specified in dataset_name", type=str)
+    parser.add_argument("--test", help="toggle test mode", action="store_true")
 
     args = parser.parse_args()
     print("Running script:" + parser.prog)
@@ -166,5 +137,5 @@ if __name__ == "__main__":
     if args.task is not None:
         dataset = (args.dataset_name, args.task)
 
-    baseline_experiment(dataset)
+    baseline_experiment(dataset, args.test)
 
