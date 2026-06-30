@@ -104,7 +104,6 @@ def baseline_experiment(dataset, n_jobs, test=False):
     parallel = Parallel(n_jobs=n_jobs, prefer="processes") # time for a test run: ~220s
     #parallel = Parallel(n_jobs=n_jobs, prefer="threads") # time for a test run: ~456s
     for i in [0,1,2]: # tune for the nuber of quantifiers
-        configured_generation_run = partial(generation_run, train, val, test, i)
         results.extend(parallel(
             delayed(generation_run)(train, val, test, i, params) for params in quantifier_params))
 
