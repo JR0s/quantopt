@@ -34,19 +34,19 @@ def prepare_dataset(dataset):
     return training, val_generator, test_generator
 
 
-def generation_run(train,val, test, i, quantifier_params):
+def generation_run(train,val, test, test_flag, i, quantifier_params):
     one_res = []
     model_C, class_we = quantifier_params
     # define the used quantifier for each run
     match i:
         case 0: 
-            model = ACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000, n_jobs=1))
+            model = ACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test_flag else 1000, n_jobs=1))
             model_name = "ACC"
         case 1:
-            model = PACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000,n_jobs=1))
+            model = PACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test_flag else 1000,n_jobs=1))
             model_name="PACC"
         case 2:
-            model = SLD(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000,n_jobs=1))
+            model = SLD(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test_flag else 1000,n_jobs=1))
             model_name="SLD"
         case _: raise ValueError("Error while iterating quantifiers.")
             
@@ -74,14 +74,14 @@ def generation_run(train,val, test, i, quantifier_params):
             "t_est": t_est,
             "t_train": t_train
         })
-        if test and test_run_number >= 100: # select the number of iterations for a test run
+        if test_flag and test_run_number >= 100: # select the number of iterations for a test run
             break
     return one_res
     
 
 
 # Function for a given experiment
-def baseline_experiment(dataset, n_jobs, test=False):
+def baseline_experiment(dataset, n_jobs, test_flag=False):
     if(type(dataset) == tuple):
         name, task = dataset
         name = name + "_" + task
@@ -96,7 +96,7 @@ def baseline_experiment(dataset, n_jobs, test=False):
     
     # Define the quantifier/classifier parameters
     # parameters of the type: C, class_weight
-    model_C = np.geomspace(1e-3, 1e2, 6 if test else 21)
+    model_C = np.geomspace(1e-3, 1e2, 6 if test_flag else 21)
     class_w = [None, "balanced"]
     quantifier_params = list(itertools.product(model_C, class_w))
 
@@ -105,7 +105,7 @@ def baseline_experiment(dataset, n_jobs, test=False):
     #parallel = Parallel(n_jobs=n_jobs, prefer="threads") # time for a test run: ~456s
     for i in [0,1,2]: # tune for the nuber of quantifiers
         results.extend(parallel(
-            delayed(generation_run)(train, val, test, i, params) for params in quantifier_params))
+            delayed(generation_run)(train, val, test,test_flag, i, params) for params in quantifier_params))
 
     results = pd.DataFrame(results)
     results.to_csv(filename)
