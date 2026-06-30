@@ -44,7 +44,7 @@ def baseline_experiment(dataset, test=False):
         name = dataset
     file_time = time.localtime()
     file_time = str(file_time.tm_year) + "_" + str(file_time.tm_mon) + "_" + str(file_time.tm_mday) + "_" + str(file_time.tm_hour) + "_" + str(file_time.tm_min) + "_" + str(file_time.tm_sec)
-    filename = "baseline_" + file_time + "_" + name
+    filename = "baseline_" + file_time + "_" + name + ".csv"
     # load the dataset
     train, val, test = prepare_dataset(dataset)
 

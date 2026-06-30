@@ -1,0 +1,378 @@
+,quantifier,C,class_weight,std_dev,variance,mean,error_type,number_of_folds
+0,ACC,0.001,None,"[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 1.43048962e-18]","[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 2.04630057e-36]","[      nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+ 0.0188179]",mae,100
+1,ACC,0.001,balanced,"[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 5.32986554e-18]","[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 2.84074667e-35]","[       nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan 0.01290772]",mae,100
+2,ACC,0.01,None,"[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 3.25462973e-18]","[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 1.05926147e-35]","[       nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan 0.01879404]",mae,100
+3,ACC,0.01,balanced,"[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 2.58467977e-18]","[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 6.68056949e-36]","[       nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan 0.01346961]",mae,100
+4,ACC,0.1,None,"[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 5.35240207e-18]","[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 2.86482079e-35]","[      nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+       nan       nan       nan       nan       nan       nan       nan
+ 0.0194276]",mae,100
+5,ACC,0.1,balanced,"[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 2.24845861e-18]","[          nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan 5.0555661e-36]","[     nan      nan      nan      nan      nan      nan      nan      nan
+      nan      nan      nan      nan      nan      nan      nan      nan
+      nan      nan      nan      nan      nan      nan      nan      nan
+      nan      nan      nan      nan      nan      nan      nan      nan
+      nan      nan      nan      nan      nan      nan      nan      nan
+      nan      nan      nan      nan      nan      nan      nan      nan
+      nan 0.014041]",mae,100
+6,ACC,1.0,None,"[          nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan 7.2858386e-18]","[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 5.30834441e-35]","[       nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan 0.01930661]",mae,100
+7,ACC,1.0,balanced,"[          nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan 2.4655053e-18]","[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 6.07871639e-36]","[       nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan 0.01380076]",mae,100
+8,ACC,10.0,None,"[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 6.13807824e-18]","[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 3.76760045e-35]","[       nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan 0.01955577]",mae,100
+9,ACC,10.0,balanced,"[          nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan 2.0080876e-18]","[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 4.03241582e-36]","[       nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan 0.01378018]",mae,100
+10,ACC,100.0,None,"[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 5.58354645e-18]","[          nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan           nan
+           nan           nan           nan           nan 3.1175991e-35]","[       nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan 0.01955287]",mae,100
+11,ACC,100.0,balanced,"[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 1.47196168e-18]","[           nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan            nan            nan            nan
+            nan 2.16667119e-36]","[       nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan 0.01376343]",mae,100
