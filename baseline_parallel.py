@@ -3,6 +3,7 @@ import time
 import itertools
 from multiprocessing import Pool
 from functools import partial
+from joblib import Parallel, delayed
 
 import jax.numpy as jnp
 import pandas as pd
@@ -39,13 +40,13 @@ def generation_run(train,val, test, i, quantifier_params):
     # define the used quantifier for each run
     match i:
         case 0: 
-            model = ACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000))
+            model = ACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000, n_jobs=1))
             model_name = "ACC"
         case 1:
-            model = PACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000))
+            model = PACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000,n_jobs=1))
             model_name="PACC"
         case 2:
-            model = SLD(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000))
+            model = SLD(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000,n_jobs=1))
             model_name="SLD"
         case _: raise ValueError("Error while iterating quantifiers.")
             
@@ -99,12 +100,13 @@ def baseline_experiment(dataset, n_jobs, test=False):
     class_w = [None, "balanced"]
     quantifier_params = list(itertools.product(model_C, class_w))
 
-    
     results = []
+    parallel = Parallel(n_jobs=n_jobs, prefer="processes") # time for a test run: ~220s
+    #parallel = Parallel(n_jobs=n_jobs, prefer="threads") # time for a test run: ~456s
     for i in [0,1,2]: # tune for the nuber of quantifiers
         configured_generation_run = partial(generation_run, train, val, test, i)
-        with Pool(n_jobs if n_jobs > 0 else None) as pool:
-            results.extend(pool.imap(configured_generation_run, quantifier_params))
+        results.extend(parallel(
+            delayed(generation_run)(train, val, test, i, params) for params in quantifier_params))
 
     results = pd.DataFrame(results)
     results.to_csv(filename)
@@ -128,5 +130,7 @@ if __name__ == "__main__":
     if args.task is not None:
         dataset = (args.dataset_name, args.task)
 
+    t0 = time.time()
     baseline_experiment(dataset, args.n_jobs, args.test)
-
+    t_end = time.time()-t0
+    print(f"experiment took {t_end} seconds")
