@@ -1,11 +1,8 @@
 import argparse
 import time
 import itertools
-from multiprocessing import Pool
-from functools import partial
 from joblib import Parallel, delayed
 
-import jax.numpy as jnp
 import pandas as pd
 import numpy as np
 
@@ -33,11 +30,11 @@ def prepare_dataset(dataset):
     # split the set into training, validation and test subsets
     return training, val_generator, test_generator
 
-
+# Method that defines a single run for one configuration
 def generation_run(train,val, test, test_flag, i, quantifier_params):
     one_res = []
     model_C, class_we = quantifier_params
-    # define the used quantifier for each run
+    # define the quantifier for each run
     match i:
         case 0: 
             model = ACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test_flag else 1000, n_jobs=1))
@@ -51,7 +48,6 @@ def generation_run(train,val, test, test_flag, i, quantifier_params):
         case _: raise ValueError("Error while iterating quantifiers.")
             
     print("Training the quantifier: " + str(model))
-    print(f"With parameters: C={model_C}, class_weight={class_we}")
         
     # train the quantifier
     t_train_begin = time.time()
@@ -60,7 +56,7 @@ def generation_run(train,val, test, test_flag, i, quantifier_params):
     t_train = time.time() - t_train_begin
     print("Training took: " + str(t_train))
 
-    # evaluate the quantifier
+    # evaluate the quantifier and report the results
     for test_run_number, (X_i, p_i) in enumerate(val()):
         t0 = time.time()
         p_est = trained_quantifier.predict(X_i)

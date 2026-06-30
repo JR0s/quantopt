@@ -36,7 +36,7 @@ def prepare_dataset(dataset):
 
 
 # Function for a given experiment
-def baseline_experiment(dataset, test=False):
+def baseline_experiment(dataset, test_flag=False):
     if(type(dataset) == tuple):
         name, task = dataset
         name = name + "_" + task
@@ -76,13 +76,13 @@ def baseline_experiment(dataset, test=False):
             # define the used quantifier for each run
             match i:
                 case 0: 
-                    model = ACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000))
+                    model = ACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test_flag else 1000))
                     model_name = "ACC"
                 case 1:
-                    model = PACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000))
+                    model = PACC(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test_flag else 1000))
                     model_name="PACC"
                 case 2:
-                    model = SLD(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test else 1000))
+                    model = SLD(LogisticRegression(C=model_C, class_weight=class_we, max_iter=10 if test_flag else 1000))
                     model_name="SLD"
                 case _: raise ValueError("Error while iterating quantifiers.")
             
@@ -110,7 +110,7 @@ def baseline_experiment(dataset, test=False):
                     "t_est": t_est,
                     "t_train": t_train
                 })
-                if test and test_run >= 100:
+                if test_flag and test_run >= 100:
                     break
 
 
