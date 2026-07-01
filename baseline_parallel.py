@@ -68,7 +68,8 @@ def generation_run(train,val, test, test_flag, i, quantifier_params):
             "p_est": p_est,
             "p_val": p_i,
             "t_est": t_est,
-            "t_train": t_train
+            "t_train": t_train,
+            "val_sample": test_run_number
         })
         if test_flag and test_run_number >= 100: # select the number of iterations for a test run
             break
@@ -99,9 +100,10 @@ def baseline_experiment(dataset, n_jobs, test_flag=False):
     results = []
     parallel = Parallel(n_jobs=n_jobs, prefer="processes") # time for a test run: ~220s
     #parallel = Parallel(n_jobs=n_jobs, prefer="threads") # time for a test run: ~456s
-    for i in [0,1,2]: # tune for the nuber of quantifiers
-        results.extend(parallel(
-            delayed(generation_run)(train, val, test,test_flag, i, params) for params in quantifier_params))
+    quant_number = [0] if test_flag else[0,1,2]
+    for i in quant_number: # tune for the nuber of quantifiers
+        for run in parallel(delayed(generation_run)(train, val, test,test_flag, i, params) for params in quantifier_params):
+            results.extend(run)
 
     results = pd.DataFrame(results)
     results.to_csv(filename)
