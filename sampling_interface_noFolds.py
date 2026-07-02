@@ -7,6 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 import quapy as qp
+from stopping_instanceSelection import RandomStop
 
 # Method to load the specified file for a given quantifier
 def unpack(file, quantifier):
@@ -40,26 +41,30 @@ def plot(data, error, folds, quantifier):
     error_at_100 = data.groupby(["C", "class_weight"]).apply(compute_error, include_groups=False)
     error_at_100 = pd.DataFrame(error_at_100, columns=["error"]).reset_index()
 
-    percentages = np.linspace(0.1, 1, 10) #hier stopping+instance selection schnittstelle
     # Calculate the performance value and index for each configuration on each fold of each fraction of data
     best_performance = []
+    percentages = np.linspace(0.1, 1, 10)
+    # we want to look at folds per stopping per configuration
+
     for i, percentage in enumerate(percentages): #hier stopping+instance selection schnittstelle
         rand = np.random.RandomState(seed=42)
         acc = defaultdict(list)
-        for f in range(folds):
-            events = data.sample(frac=percentage, random_state = rand) #hier stopping+instance selection schnittstelle
-            events = events.groupby(["C", "class_weight"]).apply(compute_error, include_groups=False)
-            events = pd.DataFrame(events, columns=["error"]).reset_index()
-            for k, v in events.items():
+        randomStop = RandomStop(len(data[["C", "class_weight"]].drop_duplicates()), percentage*(len(pd.unique(data["val_sample"]))))
+        while(not all(randomStop.stop)):
+            event = data.sample(n=1, random_state = rand) # sampling interface
+            event = event.groupby(["C", "class_weight","t_est"]).apply(compute_error, include_groups=False)
+            event = pd.DataFrame(event, columns=["error"]).reset_index()
+            randomStop(event["error"], event["t_est"])
+            
+            for k, v in event.items():
                 acc[k].append(v)
 
             # for second plot
             best_performance.append({
-                "C": events.iloc[np.argmin(events["error"])]["C"],
-                "class_weight": events.iloc[np.argmin(events["error"])]["class_weight"],
-                "min_value": min(events["error"]),
-                "min_index": np.argmin(events["error"]), # argmin (= "beste" config im fold) -> error_at_100[argmin]
-                "fold_id": f,
+                "C": event.iloc[np.argmin(event["error"])]["C"],
+                "class_weight": event.iloc[np.argmin(event["error"])]["class_weight"],
+                "min_value": min(event["error"]),
+                "min_index": np.argmin(event["error"]), # argmin (= "beste" config im fold) -> error_at_100[argmin]
                 "percentage": percentage
             })
         

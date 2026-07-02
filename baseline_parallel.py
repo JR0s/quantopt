@@ -100,7 +100,8 @@ def baseline_experiment(dataset, n_jobs, test_flag=False):
     results = []
     parallel = Parallel(n_jobs=n_jobs, prefer="processes") # time for a test run: ~220s
     #parallel = Parallel(n_jobs=n_jobs, prefer="threads") # time for a test run: ~456s
-    quant_number = [0] if test_flag else[0,1,2]
+    #quant_number = [0] if test_flag else[0,1,2] # does problem along the line in the next script
+    quant_number = [0,1,2]
     for i in quant_number: # tune for the nuber of quantifiers
         for run in parallel(delayed(generation_run)(train, val, test,test_flag, i, params) for params in quantifier_params):
             results.extend(run)

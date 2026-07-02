@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pandas as pd
 import argparse
 import time
@@ -10,18 +11,39 @@ from abc import ABC, abstractmethod
 MAX_INT = jnp.int64(jnp.iinfo(jnp.int64).max)
 
 class Stopping(ABC):
-    @abstractmethod
-    def decide(self):
+    @abstractmethod #arrays der performances von allen konfigurationen
+    def __call__(self, sampled_value, runtime
+    ) -> tuple: # returns whether to stop or not (boolean) (+ config (whatever))
         pass
 
     @abstractmethod
-    def update(self):
+    def get_attributes(self):
         pass
 
+class RandomStop(Stopping):
+    def __init__(self, n_config, n_samples):
+        self.n_config = n_config
+        self.history = [[] for i in range(n_config)]
+        self.stop = [False]*n_config
+        self.n_samples = n_samples
+        self.indices = [i for i, val in enumerate(self.stop) if not val]
+
+
+    def __call__(self, sampled_value, runtime):
+        [self.history[i].append((sampled_value, runtime)) for i in self.indices]
+        if(len(max(self.history,key=len)) >= self.n_samples):
+            self.stop = [True]*self.n_config
+            self.indices = [i for i, val in enumerate(self.stop) if not val]
+        return self.stop
+
+
+    def get_attributes(self):
+        return self.history
 
 class EBGstop(Stopping):
-    def __init__(self, attr):
-        self.attr = attr
+    def __init__(self, instances):
+        self.instances = instances
+        self.history = []
     # stopping methods
     # i -> ith method being analyzed
     # beta ->
@@ -59,10 +81,16 @@ class EBGstop(Stopping):
             lb = max(lb, jnp.abs(X) - c)
             ub = min(ub, jnp.abs(X) + c)
     
-        return jnp.sign(X)*0.5*((1+eps)*lb + (1-eps)*ub)
+        return jnp.sign(X)*0.5*((1+eps)*lb + (1-eps)*ub) # expected value whether algo is better
+
+    def get_results(self):
+        pass
 
 
-
+class WilcoxonStop(Stopping):
+    def __init__(self, instances):
+        self.instances = instances
+        
     #
     # wilcoxon_history ->
     # y_sampled ->
@@ -71,11 +99,6 @@ class EBGstop(Stopping):
     # ema_val ->
     # v ->
     # p_val_thresh ->
-
-class WilcoxonStop(Stopping):
-    def __init__(self, attr):
-        self.attr = attr
-        
     def algo():
         wilcoxon_history = []
         y_sampled = []
@@ -93,6 +116,10 @@ class WilcoxonStop(Stopping):
             return ema_val <= p_val_thresh
 
 
+class RankingStop(Stopping):
+    def __init__(self, instances):
+        self.instances = instances
+
     #
     # ranking_history ->
     # con_num_instances ->
@@ -100,11 +127,6 @@ class WilcoxonStop(Stopping):
     # y_sampled ->
     #
     #
-
-class RankingStop(Stopping):
-    def __init__(self, attr):
-        self.attr = attr
-
     def algo():
         ranking_history = 0
         con_num_instances = 0
@@ -120,9 +142,10 @@ class RankingStop(Stopping):
                     return False
             return True
         
+
 class TStop(Stopping):
-    def __init__(self, attr):
-        self.attr = attr
+    def __init__(self, instances):
+        self.instances = instances
 
     def algo():
         pass
