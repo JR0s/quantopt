@@ -22,24 +22,17 @@ class Stopping(ABC):
         pass
 
 class RandomStop(Stopping):
-    def __init__(self, n_config, n_samples):
-        self.n_config = n_config
-        self.history = [[] for i in range(n_config)]
-        self.stop = [False]*n_config
+    def __init__(self, config_columns, n_samples):
+        self.config_columns = config_columns
         self.n_samples = n_samples
-        self.indices = [i for i, val in enumerate(self.stop) if not val]
-
 
     def __call__(self, dataframe):
-        [self.history[i].append(dataframe) for i in self.indices]
-        if(len(max(self.history,key=len)) >= self.n_samples):
-            self.stop = [True]*self.n_config
-            self.indices = [i for i, val in enumerate(self.stop) if not val]
-        return self.stop
-
+        dataframe = dataframe.copy()
+        dataframe["stopped"] = dataframe.groupby(self.config_columns)["val_sample"].transform(lambda gdf: gdf.nunique() >=  self.n_samples)
+        return dataframe
 
     def get_attributes(self):
-        return self.history
+        return None
 
 class EBGstop(Stopping):
     def __init__(self, instances):
@@ -169,12 +162,16 @@ class BaselineSampling(InstanceSelection):
         self.length = len(dataset)
         self.data = dataset
     def sampling(self):
-        if(self.iter < self.length):
+        if(self.iter+self.batch_size < self.length):
             res = self.data.iloc[self.iter:self.iter+self.batch_size]
             self.iter = self.iter+self.batch_size
-            return res["val_sample"]
+            return list(res["val_sample"])
+        elif(self.iter < self.length):
+            res = self.data.iloc[self.iter:self.length-1]
+            self.iter = self.length
+            return list(res["val_sample"])
         else:
-            raise ValueError("Index is outside of Dataframe bound")
+            raise ValueError(f"Index {self.iter} is outside of Dataframe bound {self.length}")
 
 class DiscriminationSampling(InstanceSelection):
     def sampling():

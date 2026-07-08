@@ -55,7 +55,7 @@ def plot(data, error, folds, quantifier):
     for percentage in percentages:
         strategy_name = f"{int(percentage*100)}%random"
         stopping_strategies[strategy_name] = RandomStop(
-            n_configurations,
+            ["quantifier", "C", "class_weight"],
             percentage * len(val_samples),
         )
     
@@ -73,7 +73,7 @@ def plot(data, error, folds, quantifier):
 
     # experiment with all strategies
     for strategy_name, strategy in stopping_strategies.items():
-        print("Strategy name is "+strategy_name)
+        print(f"This is stopping strategy {strategy_name}")
         # copy the data so that it can be split without breaking the original object
         strategy_data = data.copy()
 
@@ -85,19 +85,21 @@ def plot(data, error, folds, quantifier):
         strategy_data.loc[strategy_data["val_sample"].isin(initial_samples), "accepted"] = True
         strategy(strategy_data[strategy_data["accepted"]]) # first data for strategy
         sampler = BaselineSampling(strategy_data, batch_size, batch_size)
-        index_step = int(len(strategy_data)/n_configurations)
-        df_indices = np.arange(0, len(strategy_data), index_step)
+
         strategy_data["stopped"] = False
 
-        while(not all(strategy.stop)):
+        while((not all(strategy_data["stopped"] == True)) and sampler.iter < sampler.length):
             iteration_samples = sampler.sampling()
-            stopped_list = np.array(strategy.stop)
-            stopped_list_ind = list(df_indices*stopped_list)
-            for ind in stopped_list_ind:
-                strategy_data.loc[ind:(ind+index_step), "stopped"] = True
-            strategy_data.loc[strategy_data["val_sample"].isin(iteration_samples) & (strategy_data["stopped"] == False), "accepted"] = True # what shape do the objects have?
-            strategy(strategy_data[strategy_data["accepted"]])
+            stopped = strategy(strategy_data[strategy_data["accepted"]])
+            #print(f"length of stopped: {len(stopped)}") # = 120
+            #print(f"length of strategy_data:{len(strategy_data)}")# = 1212
+            strategy_data = pd.merge(left=strategy_data.drop(columns=["stopped"]), right=stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
+            #strategy_data["stopped"] = stopped["stopped"] # length mismatch -> look at lengths
+            # merge over configs + join on right side and left side with rest without stop
+            strategy_data.loc[strategy_data["val_sample"].isin(iteration_samples) & (strategy_data["stopped"] == False), "accepted"] = True
 
+        strategy_data.to_csv(f"join_test_{strategy_name}"+ file_time)
+        print(strategy_data)
         # the strategy has now stopped all configurations, so that we can evaluate
 
         # among all accepted evaluations, compute the apparent error
@@ -113,17 +115,12 @@ def plot(data, error, folds, quantifier):
 
         # TODO compute how many evaluations have been accepted; this is the cost
         # of the early stopping strategy
-        last_history_entry = strategy.history[len(strategy.history)-1]
-        print(last_history_entry)
-        print(last_history_entry.shape[0])
-        print(len(last_history_entry))
-        n_evals = last_history_entry.shape[0]
 
         # TODO store the results (error and number of evaluations)
         best_performance.append({
             "strategy": strategy_name,
             "error": error_of_min_at100["error"],
-            "n_evaluations": n_evals,
+            "n_evaluations": None,
         })
         
     best_performance = pd.DataFrame(best_performance)
