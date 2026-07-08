@@ -8,7 +8,8 @@ import scipy as sc
 from scipy.stats import wilcoxon
 from abc import ABC, abstractmethod
 
-MAX_INT = jnp.int64(jnp.iinfo(jnp.int64).max)
+#MAX_INT = jnp.int64(jnp.iinfo(jnp.int64).max)
+MAX_INT = 10000000000
 
 class Stopping(ABC):
     @abstractmethod #arrays der performances von allen konfigurationen
@@ -29,8 +30,8 @@ class RandomStop(Stopping):
         self.indices = [i for i, val in enumerate(self.stop) if not val]
 
 
-    def __call__(self, sampled_value, runtime):
-        [self.history[i].append((sampled_value, runtime)) for i in self.indices]
+    def __call__(self, dataframe):
+        [self.history[i].append(dataframe) for i in self.indices]
         if(len(max(self.history,key=len)) >= self.n_samples):
             self.stop = [True]*self.n_config
             self.indices = [i for i, val in enumerate(self.stop) if not val]
@@ -162,8 +163,18 @@ class InstanceSelection(ABC):
     # Instance selection methods
 
 class BaselineSampling(InstanceSelection):
-    def sampling():
-        pass
+    def __init__(self,dataset, batch_size, starting_index=0):
+        self.iter = starting_index
+        self.batch_size = batch_size
+        self.length = len(dataset)
+        self.data = dataset
+    def sampling(self):
+        if(self.iter < self.length):
+            res = self.data.iloc[self.iter:self.iter+self.batch_size]
+            self.iter = self.iter+self.batch_size
+            return res["val_sample"]
+        else:
+            raise ValueError("Index is outside of Dataframe bound")
 
 class DiscriminationSampling(InstanceSelection):
     def sampling():

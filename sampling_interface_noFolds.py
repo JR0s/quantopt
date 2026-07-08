@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 import quapy as qp
 from stopping_instanceSelection import RandomStop
+from stopping_instanceSelection import BaselineSampling
 
 # Method to load the specified file for a given quantifier
 def unpack(file, quantifier):
@@ -15,7 +16,7 @@ def unpack(file, quantifier):
     data = df.loc[df["quantifier"] == quantifier]
     data["p_est"] = data["p_est"].apply(lambda x: np.array(x.strip("[]").split(), dtype=float))
     data["p_val"] = data["p_val"].apply(lambda x: np.array(x.strip("[]").split(), dtype=float))
-    # is saved as na but the hyperparameter has value None (string here, type None leads to errors)
+    # class_weight is saved as na but the hyperparameter has value None (string here, type None leads to errors)
     data["class_weight"] = data["class_weight"].where(data["class_weight"].notna(), "None")
     return data
 
@@ -52,7 +53,7 @@ def plot(data, error, folds, quantifier):
     stopping_strategies = {} # map from strategy name (key) to a Stopping object (value)
     percentages = np.linspace(0.1, 1, 10)
     for percentage in percentages:
-        strategy_name = f"{int(percentage*100)} % random"
+        strategy_name = f"{int(percentage*100)}%random"
         stopping_strategies[strategy_name] = RandomStop(
             n_configurations,
             percentage * len(val_samples),
@@ -60,6 +61,9 @@ def plot(data, error, folds, quantifier):
     
     # TODO other strategies should be added as soon as they are implemented
 
+    sampling_strategies = {}
+    sampling_name = "baseline"
+    sampling_strategies[sampling_name] = BaselineSampling(data, batch_size, batch_size)
     # Calculate the performance value and index for each configuration on each fold of each fraction of data
     best_performance = []
     # we want to look at folds per stopping per configuration
@@ -68,8 +72,8 @@ def plot(data, error, folds, quantifier):
     rand = np.random.RandomState(seed=42)
 
     # experiment with all strategies
-    for strategy_name, strategy in stopping_strategies:
-
+    for strategy_name, strategy in stopping_strategies.items():
+        print("Strategy name is "+strategy_name)
         # copy the data so that it can be split without breaking the original object
         strategy_data = data.copy()
 
@@ -78,14 +82,21 @@ def plot(data, error, folds, quantifier):
 
         # accept the first N evaluations to initialize the strategy
         initial_samples = val_samples[:batch_size]
-        strategy_data[strategy_data["val_sample"].isin(initial_samples), "accepted"] = True
+        strategy_data.loc[strategy_data["val_sample"].isin(initial_samples), "accepted"] = True
         strategy(strategy_data[strategy_data["accepted"]]) # first data for strategy
+        sampler = BaselineSampling(strategy_data, batch_size, batch_size)
+        index_step = int(len(strategy_data)/n_configurations)
+        df_indices = np.arange(0, len(strategy_data), index_step)
+        strategy_data["stopped"] = False
 
         while(not all(strategy.stop)):
-
-            # TODO set strategy_data["accepted"] to True for the next batch of
-            # samples of those configurations that the strategy does not yet stop
-            pass
+            iteration_samples = sampler.sampling()
+            stopped_list = np.array(strategy.stop)
+            stopped_list_ind = list(df_indices*stopped_list)
+            for ind in stopped_list_ind:
+                strategy_data.loc[ind:(ind+index_step), "stopped"] = True
+            strategy_data.loc[strategy_data["val_sample"].isin(iteration_samples) & (strategy_data["stopped"] == False), "accepted"] = True # what shape do the objects have?
+            strategy(strategy_data[strategy_data["accepted"]])
 
         # the strategy has now stopped all configurations, so that we can evaluate
 
@@ -94,18 +105,25 @@ def plot(data, error, folds, quantifier):
         event = pd.DataFrame(event, columns=["error"]).reset_index()
         
         # TODO find the best configuration according to the apparent error
+        min_error = event.loc[event["error"].idxmin()].to_dict()        
 
         # TODO find the corresponding real error (@ 100 %) of this configuration; this
         # is the error of the early stopping strategy
+        error_of_min_at100 = error_at_100[(error_at_100["C"] == min_error["C"]) & (error_at_100["class_weight"] == min_error["class_weight"])]
 
         # TODO compute how many evaluations have been accepted; this is the cost
         # of the early stopping strategy
+        last_history_entry = strategy.history[len(strategy.history)-1]
+        print(last_history_entry)
+        print(last_history_entry.shape[0])
+        print(len(last_history_entry))
+        n_evals = last_history_entry.shape[0]
 
         # TODO store the results (error and number of evaluations)
         best_performance.append({
             "strategy": strategy_name,
-            "error": None,
-            "n_evaluations": None,
+            "error": error_of_min_at100["error"],
+            "n_evaluations": n_evals,
         })
         
     best_performance = pd.DataFrame(best_performance)
@@ -116,7 +134,8 @@ def plot(data, error, folds, quantifier):
     return best_performance
 
 
-# use file baseline_2026_6_29_11_11_21_lequa2022_T1B.csv first
+# use file baseline_2026_7_2_14_45_53_lequa2022_T1B.csv as a test
+# file baseline_2026_7_1_15_40_17_lequa2022_T1B.csv is whole set
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
                     prog='percentual_sampling.py',
@@ -132,8 +151,13 @@ if __name__ == "__main__":
     file = args.filename
     error = args.error_metric
     folds = args.folds
+    test_flag = args.test
     
-    quantifier = ["ACC", "PACC", "SLD"]
+    if test_flag:
+        quantifier = ["ACC"]
+    else:
+        quantifier = ["ACC", "PACC", "SLD"]
+
     for q in quantifier:
         data = unpack(file, q)
         plot(data, error, folds, q)
