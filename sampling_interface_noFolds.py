@@ -90,16 +90,19 @@ def plot(data, error, folds, quantifier):
 
         while((not all(strategy_data["stopped"] == True)) and sampler.iter < sampler.length):
             iteration_samples = sampler.sampling()
-            stopped = strategy(strategy_data[strategy_data["accepted"]])
-            #print(f"length of stopped: {len(stopped)}") # = 120
-            #print(f"length of strategy_data:{len(strategy_data)}")# = 1212
-            strategy_data = pd.merge(left=strategy_data.drop(columns=["stopped"]), right=stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
-            #strategy_data["stopped"] = stopped["stopped"] # length mismatch -> look at lengths
-            # merge over configs + join on right side and left side with rest without stop
+            print(iteration_samples)
+            stopped = strategy(strategy_data[strategy_data["accepted"]]) # length of stop with random is 120, strategy_data: 1212
+            
+            strategy_data = strategy_data.merge(stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
+            strategy_data["stopped"] = strategy_data["stopped_y"].combine_first(strategy_data["stopped_x"])
+            strategy_data = strategy_data.drop(columns=["stopped_x", "stopped_y"])
+            
+            print(strategy_data)
             strategy_data.loc[strategy_data["val_sample"].isin(iteration_samples) & (strategy_data["stopped"] == False), "accepted"] = True
+            print(strategy_data)
 
-        strategy_data.to_csv(f"join_test_{strategy_name}"+ file_time)
-        print(strategy_data)
+        # strategy_data.to_csv("test100.csv")
+        # print(strategy_data)
         # the strategy has now stopped all configurations, so that we can evaluate
 
         # among all accepted evaluations, compute the apparent error
