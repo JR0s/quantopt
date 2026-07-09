@@ -161,13 +161,16 @@ class BaselineSampling(InstanceSelection):
         self.batch_size = batch_size
         self.length = len(dataset)
         self.data = dataset
+        self.history = []
     def sampling(self):
         if(self.iter+self.batch_size < self.length):
             res = self.data.iloc[self.iter:self.iter+self.batch_size]
+            self.history.extend(list(np.arange(self.iter, self.iter+self.batch_size, step=1)))
             self.iter = self.iter+self.batch_size
             return list(res["val_sample"])
         elif(self.iter < self.length):
             res = self.data.iloc[self.iter:self.length-1]
+            self.history.extend(list(np.arange(self.iter, self.iter+self.batch_size, step=1)))
             self.iter = self.length
             return list(res["val_sample"])
         else:

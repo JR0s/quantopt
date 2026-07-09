@@ -79,30 +79,39 @@ def plot(data, error, folds, quantifier):
 
         # keep track of which evaluations are accepted by the strategy
         strategy_data["accepted"] = False
+        strategy_data["stopped"] = False
+
+        def eval_step(dataset, samples, strategy):
+            dataset.loc[dataset["val_sample"].isin(samples), "accepted"] = True
+            stopped = strategy(dataset[dataset["accepted"]])
+            dataset = dataset.merge(stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
+            dataset["stopped"] = dataset["stopped_y"].combine_first(dataset["stopped_x"])
+            dataset = dataset.drop(columns=["stopped_x", "stopped_y"])
+            dataset.loc[dataset["val_sample"].isin(samples) & (dataset["stopped"] == False), "accepted"] = True
+            return dataset
 
         # accept the first N evaluations to initialize the strategy
         initial_samples = val_samples[:batch_size]
-        strategy_data.loc[strategy_data["val_sample"].isin(initial_samples), "accepted"] = True
-        strategy(strategy_data[strategy_data["accepted"]]) # first data for strategy
+        #strategy_data.loc[strategy_data["val_sample"].isin(initial_samples), "accepted"] = True
+        #stopped = strategy(strategy_data[strategy_data["accepted"]]) # first data for strategy
+        strategy_data = eval_step(strategy_data, initial_samples, strategy)
+
+        # initialize sampler on initialized state
         sampler = BaselineSampling(strategy_data, batch_size, batch_size)
 
-        strategy_data["stopped"] = False
-
-        while((not all(strategy_data["stopped"] == True)) and sampler.iter < sampler.length):
+        while((not all(strategy_data[strategy_data["accepted"]]["stopped"] == True)) and sampler.iter < sampler.length):
             iteration_samples = sampler.sampling()
-            print(iteration_samples)
-            stopped = strategy(strategy_data[strategy_data["accepted"]]) # length of stop with random is 120, strategy_data: 1212
+            strategy_data = eval_step(strategy_data, iteration_samples, strategy)
+            #stopped = strategy(strategy_data[strategy_data["accepted"]]) # length of stop with random is 120, strategy_data: 1212
+            #strategy_data = strategy_data.merge(stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
+            #strategy_data["stopped"] = strategy_data["stopped_y"].combine_first(strategy_data["stopped_x"])
+            #strategy_data = strategy_data.drop(columns=["stopped_x", "stopped_y"])
             
-            strategy_data = strategy_data.merge(stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
-            strategy_data["stopped"] = strategy_data["stopped_y"].combine_first(strategy_data["stopped_x"])
-            strategy_data = strategy_data.drop(columns=["stopped_x", "stopped_y"])
-            
-            print(strategy_data)
-            strategy_data.loc[strategy_data["val_sample"].isin(iteration_samples) & (strategy_data["stopped"] == False), "accepted"] = True
-            print(strategy_data)
+            #strategy_data.loc[strategy_data["val_sample"].isin(iteration_samples) & (strategy_data["stopped"] == False), "accepted"] = True
 
-        # strategy_data.to_csv("test100.csv")
-        # print(strategy_data)
+        #strategy_data.to_csv("test100.csv")
+        print(len(strategy_data["accepted"]==True))
+        print(sampler.history)
         # the strategy has now stopped all configurations, so that we can evaluate
 
         # among all accepted evaluations, compute the apparent error
