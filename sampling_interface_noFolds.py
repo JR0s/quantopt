@@ -46,7 +46,7 @@ def plot(data, error, folds, quantifier):
                 return qp.error.mkld(gdata["p_est"], gdata["p_val"])
             
     # Calculate the error of each configuration for the full data for calculating the differences with the correct error
-    error_at_100 = data.groupby(["C", "class_weight"]).apply(compute_error, include_groups=False)
+    error_at_100 = data.groupby(["quantifier", "C", "class_weight"]).apply(compute_error, include_groups=False)
     error_at_100 = pd.DataFrame(error_at_100, columns=["error"]).reset_index()
 
     # instantiate all strategies for early stopping
@@ -81,19 +81,19 @@ def plot(data, error, folds, quantifier):
         strategy_data["accepted"] = False
         strategy_data["stopped"] = False
 
+        # function for evaluating the stopping on a batch of samples
         def eval_step(dataset, samples, strategy):
-            dataset.loc[dataset["val_sample"].isin(samples), "accepted"] = True
-            stopped = strategy(dataset[dataset["accepted"]])
+            dataset.loc[dataset["val_sample"].isin(samples), "accepted"] = True # add samples that are considered in evaluation
+            stopped = strategy(dataset[dataset["accepted"]]) # evaluate stopping on these samples
+            # add stopping data to the dataset and clean it up
             dataset = dataset.merge(stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
             dataset["stopped"] = dataset["stopped_y"].combine_first(dataset["stopped_x"])
             dataset = dataset.drop(columns=["stopped_x", "stopped_y"])
-            dataset.loc[dataset["val_sample"].isin(samples) & (dataset["stopped"] == False), "accepted"] = True
+            #dataset.loc[dataset["val_sample"].isin(samples) & (dataset["stopped"] == False), "accepted"] = True
             return dataset
 
         # accept the first N evaluations to initialize the strategy
         initial_samples = val_samples[:batch_size]
-        #strategy_data.loc[strategy_data["val_sample"].isin(initial_samples), "accepted"] = True
-        #stopped = strategy(strategy_data[strategy_data["accepted"]]) # first data for strategy
         strategy_data = eval_step(strategy_data, initial_samples, strategy)
 
         # initialize sampler on initialized state
@@ -102,37 +102,33 @@ def plot(data, error, folds, quantifier):
         while((not all(strategy_data[strategy_data["accepted"]]["stopped"] == True)) and sampler.iter < sampler.length):
             iteration_samples = sampler.sampling()
             strategy_data = eval_step(strategy_data, iteration_samples, strategy)
-            #stopped = strategy(strategy_data[strategy_data["accepted"]]) # length of stop with random is 120, strategy_data: 1212
-            #strategy_data = strategy_data.merge(stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
-            #strategy_data["stopped"] = strategy_data["stopped_y"].combine_first(strategy_data["stopped_x"])
-            #strategy_data = strategy_data.drop(columns=["stopped_x", "stopped_y"])
-            
-            #strategy_data.loc[strategy_data["val_sample"].isin(iteration_samples) & (strategy_data["stopped"] == False), "accepted"] = True
 
-        #strategy_data.to_csv("test100.csv")
-        print(len(strategy_data["accepted"]==True))
-        print(sampler.history)
         # the strategy has now stopped all configurations, so that we can evaluate
 
         # among all accepted evaluations, compute the apparent error
-        event = strategy_data[strategy_data["accepted"]].groupby(["C", "class_weight"]).apply(compute_error, include_groups=False)
+        event = strategy_data[strategy_data["accepted"]].groupby(["quantifier", "C", "class_weight"]).apply(compute_error, include_groups=False)
         event = pd.DataFrame(event, columns=["error"]).reset_index()
         
-        # TODO find the best configuration according to the apparent error
-        min_error = event.loc[event["error"].idxmin()].to_dict()        
+        # find the best configuration according to the apparent error
+        min_error = event.loc[event["error"].idxmin()].to_dict()
+        print(min_error)
 
-        # TODO find the corresponding real error (@ 100 %) of this configuration; this
-        # is the error of the early stopping strategy
-        error_of_min_at100 = error_at_100[(error_at_100["C"] == min_error["C"]) & (error_at_100["class_weight"] == min_error["class_weight"])]
+        # calculate the real error @ 100 % for the selected strategy, which is the real error
+        error_of_min_at100 = pd.DataFrame(error_at_100[(error_at_100["quantifier"] == min_error["quantifier"]) 
+                                            & (error_at_100["C"] == min_error["C"])
+                                            & (error_at_100["class_weight"] == min_error["class_weight"])])
 
         # TODO compute how many evaluations have been accepted; this is the cost
         # of the early stopping strategy
+        n_evals_of_min = strategy_data[(strategy_data["quantifier"] == min_error["quantifier"])
+                                        & (strategy_data["C"] == min_error["C"])
+                                        & (strategy_data["class_weight"] == min_error["class_weight"])]["accepted"].sum()
 
         # TODO store the results (error and number of evaluations)
         best_performance.append({
             "strategy": strategy_name,
-            "error": error_of_min_at100["error"],
-            "n_evaluations": None,
+            "error": error_of_min_at100["error"].to_string(),
+            "n_evaluations": n_evals_of_min
         })
         
     best_performance = pd.DataFrame(best_performance)
