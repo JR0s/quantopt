@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 
 import quapy as qp
 from stopping_instanceSelection import RandomStop
+from stopping_instanceSelection import RankingStop
+from stopping_instanceSelection import EBGstop
+from stopping_instanceSelection import WilcoxonStop
 from stopping_instanceSelection import BaselineSampling
 
 # Method to load the specified file for a given quantifier
@@ -21,7 +24,7 @@ def unpack(file, quantifier):
     return data
 
 # Method for plotting the additional error of selecting different configurations at lower percentages than the best performing configuration with 100% of data
-def plot(data, error, folds, quantifier):
+def plot(data, error, folds, quantifier, test_flag=False):
     file_time = time.localtime()
     file_time = str(file_time.tm_year) + "_" + str(file_time.tm_mon) + "_" + str(file_time.tm_mday) + "_" + str(file_time.tm_hour) + "_" + str(file_time.tm_min) + "_" + str(file_time.tm_sec)
     filename = "percentage_sampling_" + quantifier + "_" + file_time + "_" + ".csv"
@@ -31,7 +34,10 @@ def plot(data, error, folds, quantifier):
     val_samples = pd.unique(data["val_sample"])
 
     # Set the number of accepted samples per evaluation step
-    batch_size = 10 # could be another number and should be a fraction of the len(val_samples)
+    batch_size = int(0.01*len(val_samples)) # could be another number and should be a fraction of the len(val_samples)
+    if(test_flag):
+        batch_size = 10
+    print(f"The dataset has {len(val_samples)} many validation samples and a batchsize of {batch_size}")
 
     result = []
 
@@ -56,9 +62,18 @@ def plot(data, error, folds, quantifier):
         strategy_name = f"{int(percentage*100)}%random"
         stopping_strategies[strategy_name] = RandomStop(
             ["quantifier", "C", "class_weight"],
-            percentage * len(val_samples),
+            int(percentage * len(val_samples)),
         )
-    
+
+    for i in [3, 6, 0]:
+        strategy_name = f"top{i}ranking"
+        stopping_strategies[strategy_name] = RankingStop(
+            ["quantifier", "C", "class_weight"],
+            num_iterations=10, # can be set to any number the ranking should stay the same
+            error=error,
+            number_equal_configs=i
+        )
+
     # TODO other strategies should be added as soon as they are implemented
 
     sampling_strategies = {}
@@ -83,14 +98,15 @@ def plot(data, error, folds, quantifier):
 
         # function for evaluating the stopping on a batch of samples
         def eval_step(data, samples, strategy):
+            print(samples)
             dataset = data.copy()
             dataset.loc[dataset["val_sample"].isin(samples), "accepted"] = True # add whole batch to samples that are considered in evaluation 
             stopped = strategy(dataset[dataset["accepted"]]) # evaluate stopping on these samples
 
             # add stopping data to the dataset and clean it up
             dataset = dataset.merge(stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
-            dataset["stopped_x"] = dataset["stopped_x"].astype("boolean").fillna(False)
-            dataset["stopped_y"] = dataset["stopped_y"].astype("boolean").fillna(False)
+            dataset["stopped_x"] = dataset["stopped_x"].astype("boolean")
+            dataset["stopped_y"] = dataset["stopped_y"].astype("boolean")
             dataset["stopped"] = dataset["stopped_y"].combine_first(dataset["stopped_x"])
             dataset = dataset.drop(columns=["stopped_x", "stopped_y"])
             return dataset
@@ -141,7 +157,7 @@ def plot(data, error, folds, quantifier):
     return best_performance
 
 
-# use file baseline_2026_7_2_14_45_53_lequa2022_T1B.csv as a test
+# use file baseline_2026_7_17_9_49_49_lequa2022_T1B.csv as a test
 # file baseline_2026_7_1_15_40_17_lequa2022_T1B.csv is whole set
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -167,5 +183,5 @@ if __name__ == "__main__":
 
     for q in quantifier:
         data = unpack(file, q)
-        plot(data, error, folds, q)
+        plot(data, error, folds, q, test_flag)
 

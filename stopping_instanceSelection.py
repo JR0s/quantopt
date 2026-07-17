@@ -132,9 +132,8 @@ class WilcoxonStop(Stopping):
 
 
 class RankingStop(Stopping):
-    def __init__(self, config_columns, n_samples, num_iterations, error, number_equal_configs=0):
+    def __init__(self, config_columns, num_iterations, error, number_equal_configs=0):
         self.config_columns = config_columns
-        self.n_samples = n_samples
         self.ranking_history = []
         self.num_iterations = num_iterations # number of iterations the ranking should stay the same before stopping
         self.counter = 0
@@ -151,29 +150,34 @@ class RankingStop(Stopping):
                 return mkld(p_est, p_val)
 
     def __call__(self, dataframe):
-        data = dataframe.copy
-        data["val_error"] = data.groupby(self.config_columns)[["p_est", "p_val"]].apply(lambda x,y: self.compute_error(x,y))
-        errors = data.groupby(self.config_columns, "val_error").sort_values(by=["val_error"])
+        if(len(dataframe) == 0):
+            raise ValueError("The passed dataframe is empty.")
+        data = dataframe.copy()
+        val_error = data.groupby(self.config_columns).apply(lambda g: self.compute_error(g["p_est"], g["p_val"]), include_groups=False).rename("val_error").reset_index()
+        data = data.merge(val_error, on=self.config_columns, how="left")
+        errors = data.groupby(self.config_columns)["val_error"].first().sort_values()
+        error_list = list(errors.items())
         config_rank = []
-        for config in errors:
-            config_rank.append(config[self.config_columns])
-        print(config_rank)
+        for config in error_list:
+            config_rank.append(config[0])
+
         if(len(self.ranking_history) == 0):
             self.ranking_history = config_rank
             if(self.number_equal_configs == 0): # the ranking of all configurations is considered for stopping
                 self.number_equal_configs = len(self.ranking_history)
-            data.drop(columns=["val_error"])
+            data = data.drop(columns=["val_error"])
             data["stopped"] = False
             return data
 
         if(np.all(self.ranking_history[:self.number_equal_configs] == config_rank[:self.number_equal_configs])):
-            self.counter = self.counter+1
+            #self.counter = self.counter + dataframe["val_sample"].nunique()
+            self.counter = self.counter + 1
         else:
             self.ranking_history = config_rank
             self.counter = 0
 
-        data.drop(columns=["val_error"])
-        data["stopped"] = (self.counter == self.num_iterations)
+        data = data.drop(columns=["val_error"])
+        data["stopped"] = (self.counter >= self.num_iterations)
         return data
 
 
