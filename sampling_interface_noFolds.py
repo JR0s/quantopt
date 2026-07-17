@@ -26,12 +26,12 @@ def plot(data, error, folds, quantifier):
     file_time = str(file_time.tm_year) + "_" + str(file_time.tm_mon) + "_" + str(file_time.tm_mday) + "_" + str(file_time.tm_hour) + "_" + str(file_time.tm_min) + "_" + str(file_time.tm_sec)
     filename = "percentage_sampling_" + quantifier + "_" + file_time + "_" + ".csv"
 
-    # how many configurations and which validation samples are there?
+    # Calculate the number of configurations and get the name/index of the validation samples
     n_configurations = len(data[["C", "class_weight"]].drop_duplicates())
     val_samples = pd.unique(data["val_sample"])
 
-    # how many samples are acquired in each round?
-    batch_size = 10 # could be another number
+    # Set the number of accepted samples per evaluation step
+    batch_size = 10 # could be another number and should be a fraction of the len(val_samples)
 
     result = []
 
@@ -82,14 +82,17 @@ def plot(data, error, folds, quantifier):
         strategy_data["stopped"] = False
 
         # function for evaluating the stopping on a batch of samples
-        def eval_step(dataset, samples, strategy):
-            dataset.loc[dataset["val_sample"].isin(samples), "accepted"] = True # add samples that are considered in evaluation
+        def eval_step(data, samples, strategy):
+            dataset = data.copy()
+            dataset.loc[dataset["val_sample"].isin(samples), "accepted"] = True # add whole batch to samples that are considered in evaluation 
             stopped = strategy(dataset[dataset["accepted"]]) # evaluate stopping on these samples
+
             # add stopping data to the dataset and clean it up
             dataset = dataset.merge(stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
+            dataset["stopped_x"] = dataset["stopped_x"].astype("boolean").fillna(False)
+            dataset["stopped_y"] = dataset["stopped_y"].astype("boolean").fillna(False)
             dataset["stopped"] = dataset["stopped_y"].combine_first(dataset["stopped_x"])
             dataset = dataset.drop(columns=["stopped_x", "stopped_y"])
-            #dataset.loc[dataset["val_sample"].isin(samples) & (dataset["stopped"] == False), "accepted"] = True
             return dataset
 
         # accept the first N evaluations to initialize the strategy
@@ -98,8 +101,8 @@ def plot(data, error, folds, quantifier):
 
         # initialize sampler on initialized state
         sampler = BaselineSampling(strategy_data, batch_size, batch_size)
-
-        while((not all(strategy_data[strategy_data["accepted"]]["stopped"] == True)) and sampler.iter < sampler.length):
+        
+        while(not(strategy_data.groupby(["quantifier", "C", "class_weight"])["stopped"].any().all()) and sampler.iter < sampler.length):
             iteration_samples = sampler.sampling()
             strategy_data = eval_step(strategy_data, iteration_samples, strategy)
 
@@ -111,8 +114,7 @@ def plot(data, error, folds, quantifier):
         
         # find the best configuration according to the apparent error
         min_error = event.loc[event["error"].idxmin()].to_dict()
-        print(min_error)
-
+  
         # calculate the real error @ 100 % for the selected strategy, which is the real error
         error_of_min_at100 = pd.DataFrame(error_at_100[(error_at_100["quantifier"] == min_error["quantifier"]) 
                                             & (error_at_100["C"] == min_error["C"])

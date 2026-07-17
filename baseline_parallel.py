@@ -71,7 +71,7 @@ def generation_run(train,val, test, test_flag, i, quantifier_params):
             "t_train": t_train,
             "val_sample": test_run_number
         })
-        if test_flag and test_run_number >= 100: # select the number of iterations for a test run
+        if test_flag and test_run_number >= 99: # select the number of iterations for a test run (count begins at 0)
             break
     return one_res
     
@@ -100,7 +100,6 @@ def baseline_experiment(dataset, n_jobs, test_flag=False):
     results = []
     parallel = Parallel(n_jobs=n_jobs, prefer="processes") # time for a test run: ~220s
     #parallel = Parallel(n_jobs=n_jobs, prefer="threads") # time for a test run: ~456s
-    #quant_number = [0] if test_flag else[0,1,2] # does problem along the line in the next script
     quant_number = [0,1,2]
     for i in quant_number: # tune for the nuber of quantifiers
         for run in parallel(delayed(generation_run)(train, val, test,test_flag, i, params) for params in quantifier_params):
@@ -114,7 +113,7 @@ def baseline_experiment(dataset, n_jobs, test_flag=False):
 # main method for the script
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-                    prog='baseline_experiment.py',
+                    prog='baseline_parallel.py',
                     description='This is the baseline experiment of the thesis',
                     epilog='see other resources')
     parser.add_argument("dataset_name", help="dataset which is fetched from quapy", type=str)

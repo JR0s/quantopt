@@ -1,14 +1,14 @@
 import numpy as np
 import pandas as pd
+from quapy.error import mae, mrae, mkld
 
 from scipy.stats import wilcoxon
 from abc import ABC, abstractmethod
 
-MAX_INT = 10000000
 
 class Stopping(ABC):
     @abstractmethod
-    def __call__(self, sampled_value): # returnsstopping decision
+    def __call__(self, sampled_value): # returns stopping decision
         pass
 
 
@@ -18,9 +18,10 @@ class RandomStop(Stopping):
         self.n_samples = n_samples
 
     def __call__(self, dataframe):
-        dataframe = dataframe.copy()
-        dataframe["stopped"] = dataframe.groupby(self.config_columns)["val_sample"].transform(lambda gdf: gdf.nunique() >=  self.n_samples)
-        return dataframe
+        data = dataframe.copy()
+        data["stopped"] = False
+        data["stopped"] = data.groupby(self.config_columns)["val_sample"].transform(lambda gdf: gdf.nunique() >=  self.n_samples)
+        return data
 
     def get_attributes(self):
         return None
@@ -95,73 +96,85 @@ class EBGstop(Stopping):
             if(keep_running):
                 keep_running = self.algo(sample)
 
-    def get_results(self):
-        pass
 
 
 class WilcoxonStop(Stopping):
-    def __init__(self, instances):
-        self.instances = instances
+    def __init__(self, error, threshold=0.05, p_threshold=0.05):
+        self.error = error
+        self.threshold = threshold
+        self.p_threshold = p_threshold
+        self.best_config = None
+        self.configs = []
+
+    def compute_error(self, p_est, p_val):
+        match self.error:
+            case "mae":
+                return mae(p_est, p_val)
+            case "mrae":
+                return mrae(p_est, p_val)
+            case "mkld":
+                return mkld(p_est, p_val)
         
-    #
-    # wilcoxon_history ->
-    # y_sampled ->
-    # threshold ->
-    # ema ->
-    # ema_val ->
-    # v ->
-    # p_val_thresh ->
-    def algo():
-        wilcoxon_history = []
-        y_sampled = []
-        threshold = 0
-        p_val_thresh = 0
-        x = []
-        y = []
-        ema = wilcoxon(x,y)
-        if(len(wilcoxon_history) == 0 or np.count_nonzero(y_sampled)/y_sampled.shape[0] < threshold):
-            return False
-        else:
-            ema_val = wilcoxon_history[0]
-            for v in wilcoxon_history[1:]:
-                ema_val = ema * v + (1 - ema) * ema_val
-            return ema_val <= p_val_thresh
+
+    def __call__(self, dataframe):
+        data = dataframe.copy()
+        if(self.best_config == None):
+            data["val_error"] = data.groupby(self.config_columns)[["p_est", "p_val"]].apply(lambda x,y: self.compute_error(x,y))
+            errors = data.groupby(self.config_columns, "val_error").sort_values(by=["val_error"])
+            self.best_config = errors[0].to_dict()
+            # TODO initialisieren der Samples und der history
+            data["stopped"] = False
+            return data
+        
+        # finde Fehler der Configs, falls eine bessere config gefunden, setze diese als beste config
+        # TODO benutze wilcoxon test um methoden zu vergleichen
+        # stoppe methoden, deren test unter der schwelle liegt
 
 
 class RankingStop(Stopping):
-    def __init__(self, instances):
-        self.instances = instances
+    def __init__(self, config_columns, n_samples, num_iterations, error, number_equal_configs=0):
+        self.config_columns = config_columns
+        self.n_samples = n_samples
+        self.ranking_history = []
+        self.num_iterations = num_iterations # number of iterations the ranking should stay the same before stopping
+        self.counter = 0
+        self.error = error
+        self.number_equal_configs = number_equal_configs # set the number of considered configurations for stopping
 
-    #
-    # ranking_history ->
-    # con_num_instances ->
-    # min_amount ->
-    # y_sampled ->
-    #
-    #
-    def algo():
-        ranking_history = 0
-        con_num_instances = 0
-        min_amount = 0
-        y_sampled = []
-        if (len(ranking_history) < con_num_instances or
-                np.count_nonzero(y_sampled) / y_sampled.shape[0] < min_amount):
-            return False
+    def compute_error(self, p_est, p_val):
+        match self.error:
+            case "mae":
+                return mae(p_est, p_val)
+            case "mrae":
+                return mrae(p_est, p_val)
+            case "mkld":
+                return mkld(p_est, p_val)
+
+    def __call__(self, dataframe):
+        data = dataframe.copy
+        data["val_error"] = data.groupby(self.config_columns)[["p_est", "p_val"]].apply(lambda x,y: self.compute_error(x,y))
+        errors = data.groupby(self.config_columns, "val_error").sort_values(by=["val_error"])
+        config_rank = []
+        for config in errors:
+            config_rank.append(config[self.config_columns])
+        print(config_rank)
+        if(len(self.ranking_history) == 0):
+            self.ranking_history = config_rank
+            if(self.number_equal_configs == 0): # the ranking of all configurations is considered for stopping
+                self.number_equal_configs = len(self.ranking_history)
+            data.drop(columns=["val_error"])
+            data["stopped"] = False
+            return data
+
+        if(np.all(self.ranking_history[:self.number_equal_configs] == config_rank[:self.number_equal_configs])):
+            self.counter = self.counter+1
         else:
-            recent = ranking_history[-1]
-            for i in range(2, con_num_instances + 1):
-                if not np.all(recent == ranking_history[-i]):
-                    return False
-            return True
-        
+            self.ranking_history = config_rank
+            self.counter = 0
 
-class TStop(Stopping):
-    def __init__(self, instances):
-        self.instances = instances
-
-    def algo():
-        pass
-
+        data.drop(columns=["val_error"])
+        data["stopped"] = (self.counter == self.num_iterations)
+        return data
 
 
 
