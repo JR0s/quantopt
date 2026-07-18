@@ -73,6 +73,13 @@ def plot(data, error, folds, quantifier, test_flag=False):
             error=error,
             number_equal_configs=i
         )
+    
+    for j in [0]:
+        strategy_name = f"wilcoxon{j}"
+        stopping_strategies[strategy_name] = WilcoxonStop(
+            ["quantifier", "C", "class_weight"],
+            error=error
+        )
 
     # TODO other strategies should be added as soon as they are implemented
 
@@ -98,7 +105,6 @@ def plot(data, error, folds, quantifier, test_flag=False):
 
         # function for evaluating the stopping on a batch of samples
         def eval_step(data, samples, strategy):
-            print(samples)
             dataset = data.copy()
             dataset.loc[dataset["val_sample"].isin(samples), "accepted"] = True # add whole batch to samples that are considered in evaluation 
             stopped = strategy(dataset[dataset["accepted"]]) # evaluate stopping on these samples

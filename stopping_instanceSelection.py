@@ -99,12 +99,13 @@ class EBGstop(Stopping):
 
 
 class WilcoxonStop(Stopping):
-    def __init__(self, error, threshold=0.05, p_threshold=0.05):
+    def __init__(self, config_columns, error, threshold=0.05, p_threshold=0.05):
         self.error = error
+        self.config_columns = config_columns
         self.threshold = threshold
         self.p_threshold = p_threshold
         self.best_config = None
-        self.configs = []
+        self.configs = {}
 
     def compute_error(self, p_est, p_val):
         match self.error:
@@ -118,17 +119,38 @@ class WilcoxonStop(Stopping):
 
     def __call__(self, dataframe):
         data = dataframe.copy()
-        if(self.best_config == None):
-            data["val_error"] = data.groupby(self.config_columns)[["p_est", "p_val"]].apply(lambda x,y: self.compute_error(x,y))
-            errors = data.groupby(self.config_columns, "val_error").sort_values(by=["val_error"])
-            self.best_config = errors[0].to_dict()
-            # TODO initialisieren der Samples und der history
-            data["stopped"] = False
+        # consider only not stopped configurations
+        mask = (data.groupby(self.config_columns)["stopped"].transform("any"))
+        data = data[~mask]
+        if(data.groupby(self.config_columns).ngroups == 1):
+            data["stopped"] = True
             return data
-        
-        # finde Fehler der Configs, falls eine bessere config gefunden, setze diese als beste config
-        # TODO benutze wilcoxon test um methoden zu vergleichen
-        # stoppe methoden, deren test unter der schwelle liegt
+        val_error = data.groupby(self.config_columns+["val_sample"]).apply(lambda g: self.compute_error(g["p_est"], g["p_val"]), include_groups=False).rename("val_error").reset_index()
+        data = data.merge(val_error, on=self.config_columns+["val_sample"], how="left")
+        errors = data.groupby(self.config_columns).apply(lambda g: list(zip(g["val_sample"], g["val_error"])), include_groups=False).to_dict()
+
+        min_err = {}
+        for key,values in errors.items():
+            min_err[key] = np.mean([x[1] for x in values],)
+
+        self.best_config = (min(min_err.items(), key=lambda x: x[1]))
+        self.best_config = (self.best_config[0], [x[1] for x in errors[self.best_config[0]]])
+        errors.pop(self.best_config[0], None)
+
+        for configuration, values in errors.items():
+            y = [x[1] for x in values]
+            w_statistic, p_value = wilcoxon(x=self.best_config[1], y=y)
+            if(p_value < self.p_threshold):
+                mask = (
+                    (data["quantifier"] == configuration[0]) &
+                    (data["C"] == configuration[1]) &
+                    (data["class_weight"] == configuration[2])
+                )
+                data.loc[mask, "stopped"] = True
+                
+        data = data.drop(columns=["val_error"])
+
+        return data
 
 
 class RankingStop(Stopping):
@@ -153,9 +175,11 @@ class RankingStop(Stopping):
         if(len(dataframe) == 0):
             raise ValueError("The passed dataframe is empty.")
         data = dataframe.copy()
+        data = data[data["stopped"] == False] # consider only not stopped configurations
+
         val_error = data.groupby(self.config_columns).apply(lambda g: self.compute_error(g["p_est"], g["p_val"]), include_groups=False).rename("val_error").reset_index()
         data = data.merge(val_error, on=self.config_columns, how="left")
-        errors = data.groupby(self.config_columns)["val_error"].first().sort_values()
+        errors = data.groupby(self.config_columns)["val_error"].first().sort_values() # use first since the val errors are the same for each configuration
         error_list = list(errors.items())
         config_rank = []
         for config in error_list:
