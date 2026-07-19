@@ -23,80 +23,134 @@ class RandomStop(Stopping):
         data["stopped"] = data.groupby(self.config_columns)["val_sample"].transform(lambda gdf: gdf.nunique() >=  self.n_samples)
         return data
 
-    def get_attributes(self):
-        return None
-
-class EBGstop(Stopping):
-    def __init__(self, beta=1.1, delta=0.1, epsilon = 0.1, p = 1.1, range = 1):
-        self.beta = beta # factor of taking too many samples in geometric sampling
-        self.delta = delta # allowed error on the estimated mean
-        self.epsilon = epsilon # corresponding epsilon to the delta for epsilon-delta criterium
-        self.p = p # scaling factor for d
-        self.range = range # range of the random value
-        self.t = 1 # t-th taken sample
-        self.k = 0 # updating factor for geometric sampling
-        self.alpha = 0 # factor in geometric sampling: fraction of samples from two following iterations
-        self.x = 0 # variable in calculation
-        self.c = self.delta*(self.p-1)/self.p # constant factor for d_t
-
-        # values for tracking and updating the mean and variance
-        self.error_values = []
-        self.x_mean_array = [0] # predicted mean over i samples
-        self.variance_array = [0] # variance of the mean over i samples
-        
-        # values for the Welford's algorithm
-        self.mean = 0
-        self.mean_sum = 0
-
-        # track the values for the stopping decision
-        self.ct_history = []
-
-        
-    # use Welford's algorithm to udpdate the mean and variance
-    def update(self, sample):
-        self.error_values.append(sample)
-        if(len(self.error_values) >= 1):
-            self.t = self.t + 1
-
-            delta = sample - self.mean
-            new_mean = self.mean + delta/self.t
-            self.mean_sum = self.mean_sum + delta*(sample - new_mean)
-
-            self.mean = new_mean
-            self.x_mean_array.append(self.mean)
-            self.variance_array.append(self.mean_sum/self.t)
     
 
-    def algo(self, sample):
+class EBGstop(Stopping):
+    def __init__(self, config_columns, error, range = 1, delta = 0.01, epsilon = 0.01):
+        self.beta = 1.1 # factor of taking too many samples in geometric sampling
+        self.delta = delta # allowed error on the estimated mean
+        self.epsilon = epsilon # corresponding epsilon to the delta for epsilon-delta criterium
+        self.p = 1.1 # scaling factor for d
+        self.range = range # range of the random value
+        self.t = {} # t-th taken sample
+        self.k = {} # updating factor for geometric sampling
+        self.alpha = {} # factor in geometric sampling: fraction of samples from two following iterations
+        self.x = {} # variable in calculation
+        self.c = self.delta*(self.p-1)/self.p # constant factor for d_t
+        self.error = error
+        self.config_columns = config_columns
+        self.init = True
+
+        # bounds
+        self.lb = {}
+        self.ub = {}
+
+        # values for tracking and updating the mean and variance
+        self.error_values = {}
+        self.x_mean_array = {} # predicted mean over i samples [0]
+        self.variance_array = {} # variance of the mean over i samples [0]
+        
+        # values for the Welford's algorithm
+        self.mean = {}
+        self.mean_sum = {}
+
+        # track the values for the stopping decision
+        self.ct_history = {}
+        self.samples = {}
+        
+    # use Welford's algorithm to udpdate the mean and variance
+    def update(self, config, val_sample, sample_err):
+        self.error_values[config].append(sample_err)
+        if(len(self.error_values[config]) > 1):
+            self.t[config] = self.t[config] + 1
+
+            delta = sample_err - self.mean[config]
+            new_mean = self.mean[config] + delta/self.t[config]
+            self.mean_sum[config] = self.mean_sum[config] + delta*(sample_err - new_mean)
+
+            self.mean[config] = new_mean
+            self.x_mean_array[config].append(self.mean[config])
+            self.variance_array[config].append(self.mean_sum[config]/self.t[config])
+
+    def calculate_ct(self, config):
+        # empirical_std_deviation_t = sqrt(randomVariable.variance / t);
+        # R = randomVariable.upper_bound - randomVariable.lower_bound;
+        ct = self.variance_array[config][-1]*np.sqrt(2*self.x[config]/self.t[config]) + 3*self.range*self.x[config]/self.t[config]
+        return ct
+    
+    def compute_error(self, p_est, p_val):
+        match self.error:
+            case "mae":
+                return mae(p_est, p_val)
+            case "mrae":
+                return mrae(p_est, p_val)
+            case "mkld":
+                return mkld(p_est, p_val)
+
+    # abhängig von config: t, k, x, alpha
+    # nicht abhängig: beta, delta, epsilon, p, range, c
+
+    def algo(self, config, val_sample, sample_err):
         # calculate the ith predicted mean and its variance
-        self.update(sample)
-        if(self.t > np.floor(self.beta**self.k)):
-            self.k = self.k+1
-            self.alpha = np.floor(self.beta**self.k)/np.floor(self.beta**(self.k-1))
-            dk = self.c/(self.k**self.p) # d = series of probabilities going to delta
-            self.x = -self.alpha*np.log(dk/3)
-            ct = self.variance_array[-1]*np.sqrt(2*self.x/self.t) + 3*self.range*self.x/self.t
-            self.ct_history.append(ct)
+        self.update(config, val_sample, sample_err)
+        if(self.t[config] > np.floor(self.beta**self.k[config])):
+            self.k[config] = self.k[config]+1
+            self.alpha[config] = np.floor(self.beta**self.k[config])/np.floor(self.beta**(self.k[config]-1))
+            # dk = self.c / pow(log_a_base_b(t, beta), p);
+            dk = self.c/(self.k[config]**self.p) # d = series of probabilities going to delta
+            self.x[config] = -self.alpha[config]*np.log(dk/3)
+        ct = self.variance_array[config][-1]*np.sqrt(2*self.x[config]/self.t[config]) + 3*self.range*self.x[config]/self.t[config]
+        self.ct_history[config].append(ct)
+        #LB = max(LB, abs(randomVariable.mean) - c_t);
+        #UB = min(UB, abs(randomVariable.mean) + c_t);
+        #expected_value = 0.5 * ((1 + epsilon) * LB + (1 - epsilon) * UB)
+        return self.lb[config] * (1 + self.epsilon) < self.ub[config] * (1 - self.epsilon)
         
-        print(ct)
-        if self.k == 0:
-            return True
-        if self.ct_history[-1] > self.epsilon:
-            return True
-        else:
-            return False
+    def __call__(self, dataframe):
+        data = dataframe.copy()
+        # consider only not stopped configurations
+        mask = (data.groupby(self.config_columns)["stopped"].transform("any"))
+        data = data[~mask]
+        if(data.groupby(self.config_columns).ngroups == 1):
+            data["stopped"] = True
+            return data
         
-    def __call__(self, data_frame):
-        data = data_frame.copy()
-        keep_running = True
+        # apply the algorithm to each configuration individually
+        for config, group in data.groupby(self.config_columns):
+            if(self.init): # first time: fill dict with config values and initialize the samples -> do look at each sample just once
+                self.samples[config] = []
+                self.t[config] = 1
+                self.k[config] = 0
+                self.x[config] = 0
+                self.alpha[config] = 0
+                self.lb[config] = 0
+                self.ub[config] = 10000000
+                self.ct_history[config] = []
+                self.error_values[config] = []
+                self.x_mean_array[config] = [0]
+                self.variance_array[config] = [0]
+                self.mean[config] = 0
+                self.mean_sum[config] = 0
+            
+            print(config, self.samples[config])
 
-        # TODO extraction of error values of the batch in the dataframe
-        # TODO handling of each configuration being able to stop individually
-        for sample in data.groupby(self.config_columns):
-            if(keep_running):
-                keep_running = self.algo(sample)
-
-
+            # print(self.samples, self.ub)
+            stopped = False # initialise the stopping variable
+            for row in group.itertuples(index=False): # iterate over each sample
+                if(not (row.val_sample in self.samples[config])):
+                    self.samples[config].append(row.val_sample)
+                    err = self.compute_error(row.p_est, row.p_val)
+                    stopped = self.algo(config, row.val_sample, err)
+                    print(config, row.val_sample, err, stopped)
+                    # if(stopped == True): break
+            mask = (
+                    (data["quantifier"] == config[0]) &
+                    (data["C"] == config[1]) &
+                    (data["class_weight"] == config[2])
+                )
+            data.loc[mask, "stopped"] = stopped
+        self.init = False # set self.init to False after the first call
+        return data
 
 class WilcoxonStop(Stopping):
     def __init__(self, config_columns, error, threshold=0.05, p_threshold=0.05):
@@ -131,7 +185,7 @@ class WilcoxonStop(Stopping):
 
         min_err = {}
         for key,values in errors.items():
-            min_err[key] = np.mean([x[1] for x in values],)
+            min_err[key] = np.mean([x[1] for x in values])
 
         self.best_config = (min(min_err.items(), key=lambda x: x[1]))
         self.best_config = (self.best_config[0], [x[1] for x in errors[self.best_config[0]]])

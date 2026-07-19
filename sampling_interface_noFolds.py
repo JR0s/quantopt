@@ -80,6 +80,16 @@ def plot(data, error, folds, quantifier, test_flag=False):
             ["quantifier", "C", "class_weight"],
             error=error
         )
+    
+    for k in [0.01]:
+        strategy_name = f"EBGstop{k}"
+        stopping_strategies[strategy_name] = EBGstop(
+            ["quantifier", "C", "class_weight"],
+            error=error,
+            range = 1,
+            delta = 0.01,
+            epsilon = k
+        )
 
     # TODO other strategies should be added as soon as they are implemented
 
