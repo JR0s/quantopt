@@ -11,7 +11,7 @@ from stopping_instanceSelection import RandomStop
 from stopping_instanceSelection import RankingStop
 from stopping_instanceSelection import EBGstop
 from stopping_instanceSelection import WilcoxonStop
-from stopping_instanceSelection import BaselineSampling
+from stopping_instanceSelection import BaseSampling
 
 # Method to load the specified file for a given quantifier
 def unpack(file, quantifier):
@@ -23,18 +23,19 @@ def unpack(file, quantifier):
     data["class_weight"] = data["class_weight"].where(data["class_weight"].notna(), "None")
     return data
 
-# Method for plotting the additional error of selecting different configurations at lower percentages than the best performing configuration with 100% of data
-def plot(data, error, folds, quantifier, test_flag=False):
+# Main method for running the experiment
+def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_flag=False):
+    # for saving the results
     file_time = time.localtime()
     file_time = str(file_time.tm_year) + "_" + str(file_time.tm_mon) + "_" + str(file_time.tm_mday) + "_" + str(file_time.tm_hour) + "_" + str(file_time.tm_min) + "_" + str(file_time.tm_sec)
-    filename = "percentage_sampling_" + quantifier + "_" + file_time + "_" + ".csv"
+    filename = "stopping_experiment_" + quantifier + "_" + file_time + "_"
 
     # Calculate the number of configurations and get the name/index of the validation samples
     n_configurations = len(data[["C", "class_weight"]].drop_duplicates())
     val_samples = pd.unique(data["val_sample"])
 
     # Set the number of accepted samples per evaluation step
-    batch_size = int(0.01*len(val_samples)) # could be another number and should be a fraction of the len(val_samples)
+    batch_size = int(batch_size_factor*len(val_samples)) # default: 1% of data
     if(test_flag):
         batch_size = 10
     print(f"The dataset has {len(val_samples)} many validation samples and a batchsize of {batch_size}")
@@ -71,7 +72,7 @@ def plot(data, error, folds, quantifier, test_flag=False):
             ["quantifier", "C", "class_weight"],
             num_iterations=10, # can be set to any number the ranking should stay the same
             error=error,
-            number_equal_configs=i
+            number_equal_configs=i # just count the rank of the best i configs (0 = all configs)
         )
     
     for j in [0]:
@@ -92,82 +93,98 @@ def plot(data, error, folds, quantifier, test_flag=False):
 
     # TODO other strategies should be added as soon as they are implemented
 
-    sampling_strategies = {}
-    sampling_name = "baseline"
-    sampling_strategies[sampling_name] = BaselineSampling(data, batch_size, batch_size)
     # Calculate the performance value and index for each configuration on each fold of each fraction of data
     best_performance = []
     # we want to look at folds per stopping per configuration
 
-    # randomization is not needed yet (only when adding folds)
-    rand = np.random.RandomState(seed=42)
+    # function for evaluating the stopping on a batch of samples
+    def eval_step(data, samples, strategy):
+        dataset = data.copy()
+        dataset.loc[dataset["val_sample"].isin(samples), "accepted"] = True # add whole batch to samples that are considered in evaluation 
+        stopped = strategy(dataset[dataset["accepted"]]) # evaluate stopping on these samples
+
+        # add stopping data to the dataset and clean it up
+        dataset = dataset.merge(stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left", validate="one_to_one")
+        dataset["stopped_x"] = dataset["stopped_x"].astype("boolean")
+        dataset["stopped_y"] = dataset["stopped_y"].astype("boolean")
+        dataset["stopped"] = dataset["stopped_y"].combine_first(dataset["stopped_x"])
+        dataset = dataset.drop(columns=["stopped_x", "stopped_y"])
+        return dataset
 
     # experiment with all strategies
     for strategy_name, strategy in stopping_strategies.items():
         print(f"This is stopping strategy {strategy_name}")
-        # copy the data so that it can be split without breaking the original object
-        strategy_data = data.copy()
+        rng = np.random.default_rng(42)
+        for i in range(folds):
+            # copy the data so that it can be split without breaking the original object
+            strategy_data = data.copy()
 
-        # keep track of which evaluations are accepted by the strategy
-        strategy_data["accepted"] = False
-        strategy_data["stopped"] = False
+            # keep track of which evaluations are accepted by the strategy
+            strategy_data["accepted"] = False
+            strategy_data["stopped"] = False
 
-        # function for evaluating the stopping on a batch of samples
-        def eval_step(data, samples, strategy):
-            dataset = data.copy()
-            dataset.loc[dataset["val_sample"].isin(samples), "accepted"] = True # add whole batch to samples that are considered in evaluation 
-            stopped = strategy(dataset[dataset["accepted"]]) # evaluate stopping on these samples
+            # initialize sampler on initialized state
+            sampler = BaseSampling(val_samples, batch_size, rng=rng, starting_index=0)
 
-            # add stopping data to the dataset and clean it up
-            dataset = dataset.merge(stopped.drop(columns=["p_est", "p_val", "t_est", "t_train", "accepted"]), on=("quantifier", "C", "class_weight", "val_sample"), how="left")
-            dataset["stopped_x"] = dataset["stopped_x"].astype("boolean")
-            dataset["stopped_y"] = dataset["stopped_y"].astype("boolean")
-            dataset["stopped"] = dataset["stopped_y"].combine_first(dataset["stopped_x"])
-            dataset = dataset.drop(columns=["stopped_x", "stopped_y"])
-            return dataset
+            # accept the first N evaluations to initialize the strategy
+            initial_samples = sampler.sampling()
+            #print(f"init samples = {initial_samples}, batch_size = {batch_size}")
+            strategy_data = eval_step(strategy_data, initial_samples, strategy)
 
-        # accept the first N evaluations to initialize the strategy
-        initial_samples = val_samples[:batch_size]
-        strategy_data = eval_step(strategy_data, initial_samples, strategy)
+            # evaluate until all configurations have stopped
+            while(not(strategy_data.groupby(["quantifier", "C", "class_weight"])["stopped"].any().all()) and sampler.iter < sampler.length):
+                iteration_samples = sampler.sampling()
+                strategy_data = eval_step(strategy_data, iteration_samples, strategy)
 
-        # initialize sampler on initialized state
-        sampler = BaselineSampling(strategy_data, batch_size, batch_size)
+            # among all accepted evaluations, compute the apparent error
+            event = strategy_data[strategy_data["accepted"]].groupby(["quantifier", "C", "class_weight"]).apply(compute_error, include_groups=False)
+            event = pd.DataFrame(event, columns=["error"]).reset_index()
         
-        while(not(strategy_data.groupby(["quantifier", "C", "class_weight"])["stopped"].any().all()) and sampler.iter < sampler.length):
-            iteration_samples = sampler.sampling()
-            strategy_data = eval_step(strategy_data, iteration_samples, strategy)
-
-        # the strategy has now stopped all configurations, so that we can evaluate
-
-        # among all accepted evaluations, compute the apparent error
-        event = strategy_data[strategy_data["accepted"]].groupby(["quantifier", "C", "class_weight"]).apply(compute_error, include_groups=False)
-        event = pd.DataFrame(event, columns=["error"]).reset_index()
-        
-        # find the best configuration according to the apparent error
-        min_error = event.loc[event["error"].idxmin()].to_dict()
+            # find the best configuration according to the apparent error
+            min_error = event.loc[event["error"].idxmin()].to_dict()
   
-        # calculate the real error @ 100 % for the selected strategy, which is the real error
-        error_of_min_at100 = pd.DataFrame(error_at_100[(error_at_100["quantifier"] == min_error["quantifier"]) 
+            # calculate the real error @ 100 % for the selected strategy, which is the real error
+            error_of_min_at100 = pd.DataFrame(error_at_100[(error_at_100["quantifier"] == min_error["quantifier"]) 
                                             & (error_at_100["C"] == min_error["C"])
                                             & (error_at_100["class_weight"] == min_error["class_weight"])])
 
-        # TODO compute how many evaluations have been accepted; this is the cost
-        # of the early stopping strategy
-        n_evals_of_min = strategy_data[(strategy_data["quantifier"] == min_error["quantifier"])
+            # TODO compute how many evaluations have been accepted; this is the cost
+            # of the early stopping strategy
+            n_evals_of_min = strategy_data[(strategy_data["quantifier"] == min_error["quantifier"])
                                         & (strategy_data["C"] == min_error["C"])
                                         & (strategy_data["class_weight"] == min_error["class_weight"])]["accepted"].sum()
-
-        # TODO store the results (error and number of evaluations)
-        best_performance.append({
-            "strategy": strategy_name,
-            "error": error_of_min_at100["error"].to_string(),
-            "n_evaluations": n_evals_of_min
-        })
+            
+            # TODO store the results (error and number of evaluations)
+            best_performance.append({
+                "strategy": strategy_name,
+                "fold_nr": i,
+                "error@100": float(error_of_min_at100.iloc[0]["error"]),
+                "quantifier@100": error_of_min_at100.iloc[0]["quantifier"],
+                "C@100": error_of_min_at100.iloc[0]["C"],
+                "class_weight@100": error_of_min_at100.iloc[0]["class_weight"],
+                "n_evaluations": n_evals_of_min
+            })
         
     best_performance = pd.DataFrame(best_performance)
 
+    averaged_best = best_performance.groupby("strategy")[["error@100", "n_evaluations"]].mean().reset_index()
+
+    maxs = (best_performance.groupby("strategy", as_index=False)["n_evaluations"].max().rename(columns={"n_evaluations": "max_n"}))
+    mins = (best_performance.groupby("strategy", as_index=False)["n_evaluations"].min().rename(columns={"n_evaluations": "min_n"}))
+    counts = (best_performance.groupby("strategy", as_index=False).apply(
+        lambda df: (df[["quantifier@100", "C@100", "class_weight@100"]].apply(tuple, axis=1).value_counts().to_dict())
+    ).rename("config_counts").reset_index())
+
+    averaged_best = averaged_best.merge(maxs, on="strategy")
+    averaged_best = averaged_best.merge(mins, on="strategy")
+    averaged_best = averaged_best.merge(counts, on="strategy")
+        
     # for now, we do not need a plot, just a table
     print(best_performance)
+    print(averaged_best)
+
+    best_performance.to_csv(filename + "lines" + ".csv")
+    averaged_best.to_csv(filename + "agg" + ".csv")
 
     return best_performance
 
@@ -176,8 +193,8 @@ def plot(data, error, folds, quantifier, test_flag=False):
 # file baseline_2026_7_1_15_40_17_lequa2022_T1B.csv is whole set
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-                    prog='sampling_interface_noFolds.py',
-                    description='Create Plots looking at the performance for percentual sampling',
+                    prog='stopping_experiment.py',
+                    description='Run stopping Experiment and save data',
                     epilog='see other resources')
     parser.add_argument("filename", help="path to the directory of the saved data", type=str)
     parser.add_argument("-e", "--error_metric", help="error metric to be looked at", type=str)
@@ -198,5 +215,4 @@ if __name__ == "__main__":
 
     for q in quantifier:
         data = unpack(file, q)
-        plot(data, error, folds, q, test_flag)
-
+        experiment(data, error, folds, q, batch_size_factor=0.01, test_flag=test_flag)

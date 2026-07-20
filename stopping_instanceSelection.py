@@ -41,6 +41,7 @@ class EBGstop(Stopping):
         self.error = error
         self.config_columns = config_columns
         self.init = True
+        self.pred_mean = {}
 
         # bounds
         self.lb = {}
@@ -77,7 +78,7 @@ class EBGstop(Stopping):
         for i in self.x_mean_array[config]:
             summe += (i - self.mean_sum[config])**2
         self.var_sum[config] = np.sqrt(summe/self.t[config])
-        #print(f"config = {config}, val_sample = {val_sample}, err_val = {sample_err}, t = {self.t[config]}, mean = {self.mean[config]}, M2 = {self.M2[config]}, mean in array = {self.x_mean_array[config][-1]}, var = {self.variance_array[config][-1]}, 1/t sum of mean = {self.mean_sum[config]}, 1/t var = {self.var_sum[config]}")
+        # print(f"config = {config}, val_sample = {val_sample}, err_val = {sample_err}, t = {self.t[config]}, mean = {self.mean[config]}, M2 = {self.M2[config]}, mean in array = {self.x_mean_array[config][-1]}, var = {self.variance_array[config][-1]}, 1/t sum of mean = {self.mean_sum[config]}, 1/t var = {self.var_sum[config]}")
     
     def compute_error(self, p_est, p_val):
         match self.error:
@@ -107,9 +108,9 @@ class EBGstop(Stopping):
         
         self.lb[config] = max(self.lb[config], abs(self.mean_sum[config]) - self.ct_history[config][-1])
         self.ub[config] = min(self.ub[config], abs(self.mean_sum[config]) + self.ct_history[config][-1])
-        #print(f"t = {self.t[config]}, k = {self.k[config]}, x = {self.x[config]}, alpha = {self.alpha[config]}, dk = {dk}, ct = {ct}, lb = {self.lb[config]}, ub = {self.ub[config]}")
+        # print(f"t = {self.t[config]}, k = {self.k[config]}, x = {self.x[config]}, alpha = {self.alpha[config]}, dk = {dk}, ct = {ct}, lb = {self.lb[config]}, ub = {self.ub[config]}")
         
-        #expected_value = 0.5 * ((1 + epsilon) * LB + (1 - epsilon) * UB)
+        self.pred_mean[config] = 0.5 * ((1 + self.epsilon) * self.lb[config] + (1 - self.epsilon) * self.ub[config])
         return self.lb[config] * (1 + self.epsilon) >= self.ub[config] * (1 - self.epsilon) # continue as long as the lower bound is smaller
         
     def __call__(self, dataframe):
@@ -117,7 +118,7 @@ class EBGstop(Stopping):
         # consider only not stopped configurations
         mask = (data.groupby(self.config_columns)["stopped"].transform("any"))
         data = data[~mask]
-        print(data.groupby(self.config_columns).ngroups)
+        # print(data.groupby(self.config_columns).ngroups)
         if(data.groupby(self.config_columns).ngroups == 1):
             data["stopped"] = True
             return data
@@ -142,6 +143,7 @@ class EBGstop(Stopping):
                 self.M2[config] = 0
                 self.mean_sum[config] = 0
                 self.var_sum[config] = 0
+                self.pred_mean[config] = 0
             
             stopped = False # initialise the stopping variable
             for row in group.itertuples(index=False): # iterate over each sample
@@ -204,7 +206,11 @@ class WilcoxonStop(Stopping):
 
         for configuration, values in errors.items():
             y = [x[1] for x in values]
-            w_statistic, p_value = wilcoxon(x=self.best_config[1], y=y)
+            difference = np.asarray(self.best_config[1]) - np.asarray(y)
+            if np.allclose(difference, 0): # handle zero_method exception for wilcoxon test, if the values somehow are of same value
+                p_value = 1.0
+            else:
+                w_statistic, p_value = wilcoxon(x=self.best_config[1], y=y)
             if(p_value < self.p_threshold):
                 mask = (
                     (data["quantifier"] == configuration[0]) &
@@ -240,7 +246,13 @@ class RankingStop(Stopping):
         if(len(dataframe) == 0):
             raise ValueError("The passed dataframe is empty.")
         data = dataframe.copy()
-        data = data[data["stopped"] == False] # consider only not stopped configurations
+        res = dataframe.copy()
+        # perform just on not stopped configs
+        mask = (data.groupby(self.config_columns)["stopped"].transform("any"))
+        data = data[~mask]
+        if(data.groupby(self.config_columns).ngroups == 1):
+            data["stopped"] = True
+            return data
 
         val_error = data.groupby(self.config_columns).apply(lambda g: self.compute_error(g["p_est"], g["p_val"]), include_groups=False).rename("val_error").reset_index()
         data = data.merge(val_error, on=self.config_columns, how="left")
@@ -249,7 +261,6 @@ class RankingStop(Stopping):
         config_rank = []
         for config in error_list:
             config_rank.append(config[0])
-
         if(len(self.ranking_history) == 0):
             self.ranking_history = config_rank
             if(self.number_equal_configs == 0): # the ranking of all configurations is considered for stopping
@@ -258,16 +269,14 @@ class RankingStop(Stopping):
             data["stopped"] = False
             return data
 
-        if(np.all(self.ranking_history[:self.number_equal_configs] == config_rank[:self.number_equal_configs])):
-            #self.counter = self.counter + dataframe["val_sample"].nunique()
+        if(self.ranking_history[:self.number_equal_configs] == config_rank[:self.number_equal_configs]): # before: if(np.all(self.ranking_history[:self.number_equal_configs] == config_rank[:self.number_equal_configs]))
             self.counter = self.counter + 1
         else:
             self.ranking_history = config_rank
             self.counter = 0
-
         data = data.drop(columns=["val_error"])
-        data["stopped"] = (self.counter >= self.num_iterations)
-        return data
+        res["stopped"] = (self.counter >= self.num_iterations)
+        return res
 
 
 
@@ -280,7 +289,7 @@ class InstanceSelection(ABC):
     # Instance selection methods
 
 class BaselineSampling(InstanceSelection):
-    def __init__(self,dataset, batch_size, starting_index=0):
+    def __init__(self, dataset, batch_size, starting_index=0):
         self.iter = starting_index
         self.batch_size = batch_size
         self.length = len(dataset)
@@ -297,6 +306,25 @@ class BaselineSampling(InstanceSelection):
             self.history.extend(list(np.arange(self.iter, self.iter+self.batch_size, step=1)))
             self.iter = self.length
             return list(res["val_sample"])
+        else:
+            raise ValueError(f"Index {self.iter} is outside of Dataframe bound {self.length}")
+        
+
+class BaseSampling(InstanceSelection):
+    def __init__(self, sample_array, batch_size, rng, starting_index=0):
+        self.iter = starting_index
+        self.batch_size = batch_size
+        self.length = len(sample_array)
+        self.data = rng.permutation(sample_array)
+    def sampling(self):
+        if(self.iter+self.batch_size <= self.length):
+            res = self.data[self.iter:self.iter+self.batch_size]
+            self.iter = self.iter+self.batch_size
+            return res
+        elif(self.iter < self.length):
+            res = self.data[self.iter:]
+            self.iter = self.length
+            return res
         else:
             raise ValueError(f"Index {self.iter} is outside of Dataframe bound {self.length}")
 
