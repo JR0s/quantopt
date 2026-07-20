@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import math
 from quapy.error import mae, mrae, mkld
 
 from scipy.stats import wilcoxon
@@ -26,12 +27,12 @@ class RandomStop(Stopping):
     
 
 class EBGstop(Stopping):
-    def __init__(self, config_columns, error, range = 1, delta = 0.01, epsilon = 0.01):
+    def __init__(self, config_columns, error, delta = 0.01, epsilon = 0.01):
         self.beta = 1.1 # factor of taking too many samples in geometric sampling
         self.delta = delta # allowed error on the estimated mean
         self.epsilon = epsilon # corresponding epsilon to the delta for epsilon-delta criterium
         self.p = 1.1 # scaling factor for d
-        self.range = range # range of the random value
+        self.range = {} # range of the random value
         self.t = {} # t-th taken sample
         self.k = {} # updating factor for geometric sampling
         self.alpha = {} # factor in geometric sampling: fraction of samples from two following iterations
@@ -47,12 +48,14 @@ class EBGstop(Stopping):
 
         # values for tracking and updating the mean and variance
         self.error_values = {}
-        self.x_mean_array = {} # predicted mean over i samples [0]
-        self.variance_array = {} # variance of the mean over i samples [0]
+        self.x_mean_array = {} # predicted mean over i samples
+        self.variance_array = {} # variance of the mean over i samples
         
         # values for the Welford's algorithm
         self.mean = {}
+        self.M2 = {}
         self.mean_sum = {}
+        self.var_sum = {}
 
         # track the values for the stopping decision
         self.ct_history = {}
@@ -61,22 +64,20 @@ class EBGstop(Stopping):
     # use Welford's algorithm to udpdate the mean and variance
     def update(self, config, val_sample, sample_err):
         self.error_values[config].append(sample_err)
-        if(len(self.error_values[config]) > 1):
-            self.t[config] = self.t[config] + 1
+        self.t[config] = self.t[config] + 1
 
-            delta = sample_err - self.mean[config]
-            new_mean = self.mean[config] + delta/self.t[config]
-            self.mean_sum[config] = self.mean_sum[config] + delta*(sample_err - new_mean)
+        old_mean = self.mean[config]
+        self.mean[config] = self.mean[config] + (sample_err - self.mean[config])/self.t[config]
+        self.M2[config] = self.M2[config] + (sample_err - old_mean)*(sample_err - self.mean[config])
 
-            self.mean[config] = new_mean
-            self.x_mean_array[config].append(self.mean[config])
-            self.variance_array[config].append(self.mean_sum[config]/self.t[config])
-
-    def calculate_ct(self, config):
-        # empirical_std_deviation_t = sqrt(randomVariable.variance / t);
-        # R = randomVariable.upper_bound - randomVariable.lower_bound;
-        ct = self.variance_array[config][-1]*np.sqrt(2*self.x[config]/self.t[config]) + 3*self.range*self.x[config]/self.t[config]
-        return ct
+        self.x_mean_array[config].append(self.mean[config])
+        self.variance_array[config].append(self.M2[config]/self.t[config])
+        self.mean_sum[config] = 1/self.t[config]*sum(self.x_mean_array[config])
+        summe = 0
+        for i in self.x_mean_array[config]:
+            summe += (i - self.mean_sum[config])**2
+        self.var_sum[config] = np.sqrt(summe/self.t[config])
+        #print(f"config = {config}, val_sample = {val_sample}, err_val = {sample_err}, t = {self.t[config]}, mean = {self.mean[config]}, M2 = {self.M2[config]}, mean in array = {self.x_mean_array[config][-1]}, var = {self.variance_array[config][-1]}, 1/t sum of mean = {self.mean_sum[config]}, 1/t var = {self.var_sum[config]}")
     
     def compute_error(self, p_est, p_val):
         match self.error:
@@ -93,24 +94,30 @@ class EBGstop(Stopping):
     def algo(self, config, val_sample, sample_err):
         # calculate the ith predicted mean and its variance
         self.update(config, val_sample, sample_err)
-        if(self.t[config] > np.floor(self.beta**self.k[config])):
+        dk = 0
+        if(self.t[config] >= np.floor(self.beta**self.k[config])):
             self.k[config] = self.k[config]+1
             self.alpha[config] = np.floor(self.beta**self.k[config])/np.floor(self.beta**(self.k[config]-1))
-            # dk = self.c / pow(log_a_base_b(t, beta), p);
-            dk = self.c/(self.k[config]**self.p) # d = series of probabilities going to delta
+            #dk = self.c/(self.k[config]**self.p) # used in EB stop -> d = series of probabilities going to delta
+            dk = self.c / (math.log(self.beta, self.t[config])**self.p) # used in ebgstop
             self.x[config] = -self.alpha[config]*np.log(dk/3)
-        ct = self.variance_array[config][-1]*np.sqrt(2*self.x[config]/self.t[config]) + 3*self.range*self.x[config]/self.t[config]
+        self.range[config] = self.ub[config] - self.lb[config] # update range of intervall
+        ct = self.var_sum[config]*np.sqrt(2*self.x[config]/self.t[config]) + 3*self.range[config]*self.x[config]/self.t[config]
         self.ct_history[config].append(ct)
-        #LB = max(LB, abs(randomVariable.mean) - c_t);
-        #UB = min(UB, abs(randomVariable.mean) + c_t);
+        
+        self.lb[config] = max(self.lb[config], abs(self.mean_sum[config]) - self.ct_history[config][-1])
+        self.ub[config] = min(self.ub[config], abs(self.mean_sum[config]) + self.ct_history[config][-1])
+        #print(f"t = {self.t[config]}, k = {self.k[config]}, x = {self.x[config]}, alpha = {self.alpha[config]}, dk = {dk}, ct = {ct}, lb = {self.lb[config]}, ub = {self.ub[config]}")
+        
         #expected_value = 0.5 * ((1 + epsilon) * LB + (1 - epsilon) * UB)
-        return self.lb[config] * (1 + self.epsilon) < self.ub[config] * (1 - self.epsilon)
+        return self.lb[config] * (1 + self.epsilon) >= self.ub[config] * (1 - self.epsilon) # continue as long as the lower bound is smaller
         
     def __call__(self, dataframe):
         data = dataframe.copy()
         # consider only not stopped configurations
         mask = (data.groupby(self.config_columns)["stopped"].transform("any"))
         data = data[~mask]
+        print(data.groupby(self.config_columns).ngroups)
         if(data.groupby(self.config_columns).ngroups == 1):
             data["stopped"] = True
             return data
@@ -119,7 +126,7 @@ class EBGstop(Stopping):
         for config, group in data.groupby(self.config_columns):
             if(self.init): # first time: fill dict with config values and initialize the samples -> do look at each sample just once
                 self.samples[config] = []
-                self.t[config] = 1
+                self.t[config] = 0
                 self.k[config] = 0
                 self.x[config] = 0
                 self.alpha[config] = 0
@@ -127,22 +134,26 @@ class EBGstop(Stopping):
                 self.ub[config] = 10000000
                 self.ct_history[config] = []
                 self.error_values[config] = []
-                self.x_mean_array[config] = [0]
-                self.variance_array[config] = [0]
-                self.mean[config] = 0
-                self.mean_sum[config] = 0
-            
-            print(config, self.samples[config])
+                self.range[config] = 1
 
-            # print(self.samples, self.ub)
+                self.x_mean_array[config] = []
+                self.variance_array[config] = []
+                self.mean[config] = 0
+                self.M2[config] = 0
+                self.mean_sum[config] = 0
+                self.var_sum[config] = 0
+            
             stopped = False # initialise the stopping variable
             for row in group.itertuples(index=False): # iterate over each sample
                 if(not (row.val_sample in self.samples[config])):
                     self.samples[config].append(row.val_sample)
                     err = self.compute_error(row.p_est, row.p_val)
-                    stopped = self.algo(config, row.val_sample, err)
-                    print(config, row.val_sample, err, stopped)
-                    # if(stopped == True): break
+                    if(len(self.error_values[config]) == 0):
+                        self.update(config, row.val_sample, err)
+                    else:
+                        stopped = self.algo(config, row.val_sample, err)
+                    if(stopped == True):
+                        break
             mask = (
                     (data["quantifier"] == config[0]) &
                     (data["C"] == config[1]) &
