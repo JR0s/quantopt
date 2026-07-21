@@ -74,6 +74,8 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
                 ["quantifier", "C", "class_weight"],
                 num_iterations=5, # 5*batchsize
                 error=error,
+                n_samples=len(val_samples),
+                min_samples=l,
                 number_equal_configs=i # just count the rank of the best i configs (0 = all configs)
             )
             strategy_name = f"top{i}ranking_10"
@@ -81,6 +83,8 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
                 ["quantifier", "C", "class_weight"],
                 num_iterations=10, # 10*batchsize
                 error=error,
+                n_samples=len(val_samples),
+                min_samples=l,
                 number_equal_configs=i # just count the rank of the best i configs (0 = all configs)
             )
             strategy_name = f"top{i}ranking_20"
