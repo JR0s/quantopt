@@ -1,6 +1,7 @@
 import argparse
 import time
 from collections import defaultdict
+import copy
 
 import numpy as np
 import pandas as pd
@@ -116,6 +117,9 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
         print(f"This is stopping strategy {strategy_name}")
         rng = np.random.default_rng(42)
         for i in range(folds):
+            # create a new stopping strategy for each fold such that the object params are fresh for every fold
+            fold_strategy = copy.deepcopy(strategy)
+            
             # copy the data so that it can be split without breaking the original object
             strategy_data = data.copy()
 
@@ -129,12 +133,12 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
             # accept the first N evaluations to initialize the strategy
             initial_samples = sampler.sampling()
             #print(f"init samples = {initial_samples}, batch_size = {batch_size}")
-            strategy_data = eval_step(strategy_data, initial_samples, strategy)
+            strategy_data = eval_step(strategy_data, initial_samples, fold_strategy)
 
             # evaluate until all configurations have stopped
             while(not(strategy_data.groupby(["quantifier", "C", "class_weight"])["stopped"].any().all()) and sampler.iter < sampler.length):
                 iteration_samples = sampler.sampling()
-                strategy_data = eval_step(strategy_data, iteration_samples, strategy)
+                strategy_data = eval_step(strategy_data, iteration_samples, fold_strategy)
 
             # among all accepted evaluations, compute the apparent error
             event = strategy_data[strategy_data["accepted"]].groupby(["quantifier", "C", "class_weight"]).apply(compute_error, include_groups=False)
@@ -171,9 +175,9 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
 
     maxs = (best_performance.groupby("strategy", as_index=False)["n_evaluations"].max().rename(columns={"n_evaluations": "max_n"}))
     mins = (best_performance.groupby("strategy", as_index=False)["n_evaluations"].min().rename(columns={"n_evaluations": "min_n"}))
-    counts = (best_performance.groupby("strategy", as_index=False).apply(
+    counts = (best_performance.groupby("strategy").apply(
         lambda df: (df[["quantifier@100", "C@100", "class_weight@100"]].apply(tuple, axis=1).value_counts().to_dict())
-    ).rename("config_counts").reset_index())
+    , include_groups=False).rename("config_counts").reset_index())
 
     averaged_best = averaged_best.merge(maxs, on="strategy")
     averaged_best = averaged_best.merge(mins, on="strategy")
