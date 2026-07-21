@@ -27,7 +27,7 @@ class RandomStop(Stopping):
     
 
 class EBGstop(Stopping):
-    def __init__(self, config_columns, error, delta = 0.01, epsilon = 0.01):
+    def __init__(self, config_columns, error, n_samples, min_samples = 0.02, delta = 0.01, epsilon = 0.01):
         self.beta = 1.1 # factor of taking too many samples in geometric sampling
         self.delta = delta # allowed error on the estimated mean
         self.epsilon = epsilon # corresponding epsilon to the delta for epsilon-delta criterium
@@ -42,6 +42,8 @@ class EBGstop(Stopping):
         self.config_columns = config_columns
         self.init = True
         self.pred_mean = {}
+        self.min_samples = min_samples
+        self.n_samples = n_samples
 
         # bounds
         self.lb = {}
@@ -115,6 +117,13 @@ class EBGstop(Stopping):
         
     def __call__(self, dataframe):
         data = dataframe.copy()
+
+        # method needs to have a certain minimum amount of samples before stopping
+        current_n_samples = data["val_sample"].nunique()
+        if(current_n_samples <= int(self.min_samples*self.n_samples)):
+            data["stopped"] = False
+            return data
+        
         # consider only not stopped configurations
         mask = (data.groupby(self.config_columns)["stopped"].transform("any"))
         data = data[~mask]
@@ -165,13 +174,17 @@ class EBGstop(Stopping):
         self.init = False # set self.init to False after the first call
         return data
 
+# literature: minimum samples: [2, 8, 10, 12]% of samples before applying criterion
+# p-value dropoff: 5%
+# exponential moving average with beta = [0.1, 0.7]
 class WilcoxonStop(Stopping):
-    def __init__(self, config_columns, error, threshold=0.05, p_threshold=0.05):
+    def __init__(self, config_columns, error, n_samples, min_samples=0.02, p_threshold=0.05):
         self.error = error
         self.config_columns = config_columns
-        self.threshold = threshold
         self.p_threshold = p_threshold
         self.best_config = None
+        self.min_samples = min_samples
+        self.n_samples = n_samples
         self.configs = {}
 
     def compute_error(self, p_est, p_val):
@@ -186,6 +199,13 @@ class WilcoxonStop(Stopping):
 
     def __call__(self, dataframe):
         data = dataframe.copy()
+
+        # method needs to have a certain minimum amount of samples before stopping
+        current_n_samples = data["val_sample"].nunique()
+        if(current_n_samples <= int(self.min_samples*self.n_samples)):
+            data["stopped"] = False
+            return data
+
         # consider only not stopped configurations
         mask = (data.groupby(self.config_columns)["stopped"].transform("any"))
         data = data[~mask]
@@ -210,7 +230,7 @@ class WilcoxonStop(Stopping):
             if np.allclose(difference, 0): # handle zero_method exception for wilcoxon test, if the values somehow are of same value
                 p_value = 1.0
             else:
-                w_statistic, p_value = wilcoxon(x=self.best_config[1], y=y)
+                w_statistic, p_value = wilcoxon(x=self.best_config[1], y=y, alternative="less", method="exact") # use one sided wilcoxon test, zero_method="pratt" can be used as alternative
             if(p_value < self.p_threshold):
                 mask = (
                     (data["quantifier"] == configuration[0]) &
@@ -224,13 +244,17 @@ class WilcoxonStop(Stopping):
         return data
 
 
+# literature: minimum samples: [2, 8, 10, 12]% of samples before applying criterion
+# convergence: stay the same for [1,2]% of all samples
 class RankingStop(Stopping):
-    def __init__(self, config_columns, num_iterations, error, number_equal_configs=0):
+    def __init__(self, config_columns, num_iterations, error, n_samples, min_samples=0.02, number_equal_configs=0):
         self.config_columns = config_columns
         self.ranking_history = []
         self.num_iterations = num_iterations # number of iterations the ranking should stay the same before stopping
         self.counter = 0
         self.error = error
+        self.min_samples = min_samples
+        self.n_samples = n_samples
         self.number_equal_configs = number_equal_configs # set the number of considered configurations for stopping
 
     def compute_error(self, p_est, p_val):
@@ -246,7 +270,13 @@ class RankingStop(Stopping):
         if(len(dataframe) == 0):
             raise ValueError("The passed dataframe is empty.")
         data = dataframe.copy()
-        res = dataframe.copy()
+
+        # method needs to have a certain minimum amount of samples before stopping
+        current_n_samples = data["val_sample"].nunique()
+        if(current_n_samples <= int(self.min_samples*self.n_samples)):
+            data["stopped"] = False
+            return data
+        
         # perform just on not stopped configs
         mask = (data.groupby(self.config_columns)["stopped"].transform("any"))
         data = data[~mask]
@@ -275,8 +305,8 @@ class RankingStop(Stopping):
             self.ranking_history = config_rank
             self.counter = 0
         data = data.drop(columns=["val_error"])
-        res["stopped"] = (self.counter >= self.num_iterations)
-        return res
+        data["stopped"] = (self.counter >= self.num_iterations)
+        return data
 
 
 

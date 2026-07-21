@@ -29,7 +29,7 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
     # for saving the results
     file_time = time.localtime()
     file_time = str(file_time.tm_year) + "_" + str(file_time.tm_mon) + "_" + str(file_time.tm_mday) + "_" + str(file_time.tm_hour) + "_" + str(file_time.tm_min) + "_" + str(file_time.tm_sec)
-    filename = "stopping_experiment_" + quantifier + "_" + file_time + "_"
+    filename = "stopping_experiment_" + quantifier + "_" + error + "_" + file_time + "_"
 
     # Calculate the number of configurations and get the name/index of the validation samples
     n_configurations = len(data[["C", "class_weight"]].drop_duplicates())
@@ -68,29 +68,53 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
         )
 
     for i in [3, 6, 0]:
-        strategy_name = f"top{i}ranking"
-        stopping_strategies[strategy_name] = RankingStop(
-            ["quantifier", "C", "class_weight"],
-            num_iterations=10, # can be set to any number the ranking should stay the same
-            error=error,
-            number_equal_configs=i # just count the rank of the best i configs (0 = all configs)
-        )
+        for l in [2, 8, 10, 12]: # number of starting samples
+            strategy_name = f"top{i}ranking_5"
+            stopping_strategies[strategy_name] = RankingStop(
+                ["quantifier", "C", "class_weight"],
+                num_iterations=5, # 5*batchsize
+                error=error,
+                number_equal_configs=i # just count the rank of the best i configs (0 = all configs)
+            )
+            strategy_name = f"top{i}ranking_10"
+            stopping_strategies[strategy_name] = RankingStop(
+                ["quantifier", "C", "class_weight"],
+                num_iterations=10, # 10*batchsize
+                error=error,
+                number_equal_configs=i # just count the rank of the best i configs (0 = all configs)
+            )
+            strategy_name = f"top{i}ranking_20"
+            stopping_strategies[strategy_name] = RankingStop(
+                ["quantifier", "C", "class_weight"],
+                num_iterations=20, # 20*batchsize
+                error=error,
+                n_samples=len(val_samples),
+                min_samples=l,
+                number_equal_configs=i # just count the rank of the best i configs (0 = all configs)
+            )
     
-    for j in [0]:
-        strategy_name = f"wilcoxon{j}"
-        stopping_strategies[strategy_name] = WilcoxonStop(
-            ["quantifier", "C", "class_weight"],
-            error=error
-        )
+    for j in [0.01, 0.05, 0.1]:
+        for m in [2, 8, 10, 12]:
+            strategy_name = f"wilcoxon{j}_{m}"
+            stopping_strategies[strategy_name] = WilcoxonStop(
+                ["quantifier", "C", "class_weight"],
+                error=error,
+                n_samples=len(val_samples),
+                min_samples=m,
+                p_threshold=j
+            )
     
-    for k in [0.1]:
-        strategy_name = f"EBGstop{k}"
-        stopping_strategies[strategy_name] = EBGstop(
-            ["quantifier", "C", "class_weight"],
-            error=error,
-            delta = 0.1,
-            epsilon = k
-        )
+    for k in [0.01, 0.05, 0.1]:
+        for n in [2, 8, 10, 12]:
+            strategy_name = f"EBGstop{k}_n"
+            stopping_strategies[strategy_name] = EBGstop(
+                ["quantifier", "C", "class_weight"],
+                error=error,
+                n_samples=len(val_samples),
+                min_samples=n,
+                delta = 0.1,
+                epsilon = k
+            )
 
     # TODO other strategies should be added as soon as they are implemented
 
