@@ -89,7 +89,15 @@ class EBGstop(Stopping):
             case "mrae":
                 return mrae(p_est, p_val, eps=1/(2*len(p_est)))
             case "mkld":
-                return mkld(p_est, p_val, eps=1/(2*len(p_est)))
+                def make_prevalence_matrix(x):
+                    if isinstance(x, np.ndarray):
+                        return np.vstack(x).astype(float) if x.dtype == object else x.astype(float)
+                    else:
+                        return np.vstack(x.to_numpy()).astype(float)
+
+                p_estimates = make_prevalence_matrix(p_est)
+                p_vals = make_prevalence_matrix(p_val)
+                return mkld(p_estimates, p_vals, eps=1/(2*len(p_est)))
 
     # abhängig von config: t, k, x, alpha
     # nicht abhängig: beta, delta, epsilon, p, range, c
@@ -194,7 +202,15 @@ class WilcoxonStop(Stopping):
             case "mrae":
                 return mrae(p_est, p_val, eps=1/(2*len(p_est)))
             case "mkld":
-                return mkld(p_est, p_val, eps=1/(2*len(p_est)))
+                def make_prevalence_matrix(x):
+                    if isinstance(x, np.ndarray):
+                        return np.vstack(x).astype(float) if x.dtype == object else x.astype(float)
+                    else:
+                        return np.vstack(x.to_numpy()).astype(float)
+
+                p_estimates = make_prevalence_matrix(p_est)
+                p_vals = make_prevalence_matrix(p_val)
+                return mkld(p_estimates, p_vals, eps=1/(2*len(p_est)))
         
 
     def __call__(self, dataframe):
@@ -264,7 +280,15 @@ class RankingStop(Stopping):
             case "mrae":
                 return mrae(p_est, p_val, eps=1/(2*len(p_est)))
             case "mkld":
-                return mkld(p_est, p_val, eps=1/(2*len(p_est)))
+                def make_prevalence_matrix(x):
+                    if isinstance(x, np.ndarray):
+                        return np.vstack(x).astype(float) if x.dtype == object else x.astype(float)
+                    else:
+                        return np.vstack(x.to_numpy()).astype(float)
+
+                p_estimates = make_prevalence_matrix(p_est)
+                p_vals = make_prevalence_matrix(p_val)
+                return mkld(p_estimates, p_vals, eps=1/(2*len(p_est)))
 
     def __call__(self, dataframe):
         if(len(dataframe) == 0):

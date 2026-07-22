@@ -53,7 +53,9 @@ def experiment(data, error, folds, quantifier, n_jobs, batch_size_factor = 0.01,
             case "mrae":
                 return qp.error.mrae(gdata["p_est"], gdata["p_val"], eps=1/(2*gdata["val_sample"].nunique()))
             case "mkld":
-                return qp.error.mkld(gdata["p_est"], gdata["p_val"], eps=1/(2*gdata["val_sample"].nunique()))
+                p_estimates = np.vstack(gdata["p_est"].to_numpy())
+                p_vals = np.vstack(gdata["p_val"].to_numpy())
+                return qp.error.mkld(p_estimates, p_vals, eps=1/(2*gdata["val_sample"].nunique()))
             
     # Calculate the error of each configuration for the full data for calculating the differences with the correct error
     error_at_100 = data.groupby(["quantifier", "C", "class_weight"]).apply(compute_error, include_groups=False)
