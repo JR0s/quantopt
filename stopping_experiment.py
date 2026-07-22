@@ -2,6 +2,7 @@ import argparse
 import time
 from collections import defaultdict
 import copy
+from joblib import Parallel, delayed
 
 import numpy as np
 import pandas as pd
@@ -25,7 +26,7 @@ def unpack(file, quantifier):
     return data
 
 # Main method for running the experiment
-def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_flag=False):
+def experiment(data, error, folds, quantifier, n_jobs, batch_size_factor = 0.01, test_flag=False):
     # for saving the results
     file_time = time.localtime()
     file_time = str(file_time.tm_year) + "_" + str(file_time.tm_mon) + "_" + str(file_time.tm_mday) + "_" + str(file_time.tm_hour) + "_" + str(file_time.tm_min) + "_" + str(file_time.tm_sec)
@@ -38,7 +39,7 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
     # Set the number of accepted samples per evaluation step
     batch_size = int(batch_size_factor*len(val_samples)) # default: 1% of data
     if(test_flag):
-        batch_size = 10
+        batch_size = 1
     print(f"The dataset has {len(val_samples)} many validation samples and a batchsize of {batch_size}")
 
     result = []
@@ -68,8 +69,8 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
         )
 
     for i in [3, 6, 0]:
-        for l in [2, 8, 10, 12]: # number of starting samples
-            strategy_name = f"top{i}ranking_5"
+        for l in [0.02, 0.08, 0.1, 0.12]: # number of starting samples
+            strategy_name = f"top{i}ranking_5r_{l}"
             stopping_strategies[strategy_name] = RankingStop(
                 ["quantifier", "C", "class_weight"],
                 num_iterations=5, # 5*batchsize
@@ -78,7 +79,7 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
                 min_samples=l,
                 number_equal_configs=i # just count the rank of the best i configs (0 = all configs)
             )
-            strategy_name = f"top{i}ranking_10"
+            strategy_name = f"top{i}ranking_10r_{l}"
             stopping_strategies[strategy_name] = RankingStop(
                 ["quantifier", "C", "class_weight"],
                 num_iterations=10, # 10*batchsize
@@ -87,7 +88,7 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
                 min_samples=l,
                 number_equal_configs=i # just count the rank of the best i configs (0 = all configs)
             )
-            strategy_name = f"top{i}ranking_20"
+            strategy_name = f"top{i}ranking_20r_{l}"
             stopping_strategies[strategy_name] = RankingStop(
                 ["quantifier", "C", "class_weight"],
                 num_iterations=20, # 20*batchsize
@@ -98,7 +99,7 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
             )
     
     for j in [0.01, 0.05, 0.1]:
-        for m in [2, 8, 10, 12]:
+        for m in [0.02, 0.08, 0.1, 0.12]:
             strategy_name = f"wilcoxon{j}_{m}"
             stopping_strategies[strategy_name] = WilcoxonStop(
                 ["quantifier", "C", "class_weight"],
@@ -109,8 +110,8 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
             )
     
     for k in [0.01, 0.05, 0.1]:
-        for n in [2, 8, 10, 12]:
-            strategy_name = f"EBGstop{k}_n"
+        for n in [0.02, 0.08, 0.1, 0.12]:
+            strategy_name = f"EBGstop{k}_{n}"
             stopping_strategies[strategy_name] = EBGstop(
                 ["quantifier", "C", "class_weight"],
                 error=error,
@@ -139,11 +140,11 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
         dataset["stopped"] = dataset["stopped_y"].combine_first(dataset["stopped_x"])
         dataset = dataset.drop(columns=["stopped_x", "stopped_y"])
         return dataset
-
-    # experiment with all strategies
-    for strategy_name, strategy in stopping_strategies.items():
+    
+    def eval_strategy(data, error, folds, quantifier, val_samples, batch_size, strategy_name, strategy):
         print(f"This is stopping strategy {strategy_name}")
         rng = np.random.default_rng(42)
+        best_performance_one_run = []
         for i in range(folds):
             # create a new stopping strategy for each fold such that the object params are fresh for every fold
             fold_strategy = copy.deepcopy(strategy)
@@ -187,7 +188,7 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
                                         & (strategy_data["class_weight"] == min_error["class_weight"])]["accepted"].sum()
             
             # TODO store the results (error and number of evaluations)
-            best_performance.append({
+            best_performance_one_run.append({
                 "strategy": strategy_name,
                 "fold_nr": i,
                 "error@100": float(error_of_min_at100.iloc[0]["error"]),
@@ -196,7 +197,14 @@ def experiment(data, error, folds, quantifier, batch_size_factor = 0.01, test_fl
                 "class_weight@100": error_of_min_at100.iloc[0]["class_weight"],
                 "n_evaluations": n_evals_of_min
             })
-        
+        return best_performance_one_run
+
+    # experiment with all strategies
+    parallel = Parallel(n_jobs=n_jobs, prefer="processes") # time for a test run: ~220s
+    for run in parallel(delayed(eval_strategy)(data=data, error=error, folds=folds, quantifier=quantifier, val_samples=val_samples, batch_size=batch_size, strategy_name=strategy_name, strategy=strategy) for (strategy_name, strategy) in stopping_strategies.items()):
+            best_performance.extend(run)
+
+                    
     best_performance = pd.DataFrame(best_performance)
 
     averaged_best = best_performance.groupby("strategy")[["error@100", "n_evaluations"]].mean().reset_index()
@@ -231,7 +239,9 @@ if __name__ == "__main__":
     parser.add_argument("filename", help="path to the directory of the saved data", type=str)
     parser.add_argument("-e", "--error_metric", help="error metric to be looked at", type=str)
     parser.add_argument("-f", "--folds", help="number of folds for calculating mean and variance", type=int)
+    parser.add_argument("-j", "--jobs", help="number of parallel jobs", type=int)
     parser.add_argument("--test", help="toggle test mode", action="store_true")
+    
 
     args = parser.parse_args()
     print("Running script:" + parser.prog)
@@ -239,6 +249,7 @@ if __name__ == "__main__":
     error = args.error_metric
     folds = args.folds
     test_flag = args.test
+    n_jobs = args.jobs
     
     if test_flag:
         quantifier = ["ACC"]
@@ -247,4 +258,4 @@ if __name__ == "__main__":
 
     for q in quantifier:
         data = unpack(file, q)
-        experiment(data, error, folds, q, batch_size_factor=0.01, test_flag=test_flag)
+        experiment(data, error, folds, q, n_jobs, batch_size_factor=0.01, test_flag=test_flag)
