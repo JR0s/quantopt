@@ -87,9 +87,9 @@ class EBGstop(Stopping):
             case "mae":
                 return mae(p_est, p_val)
             case "mrae":
-                return mrae(p_est, p_val)
+                return mrae(p_est, p_val, eps=1/(2*len(p_est)))
             case "mkld":
-                return mkld(p_est, p_val)
+                return mkld(p_est, p_val, eps=1/(2*len(p_est)))
 
     # abhängig von config: t, k, x, alpha
     # nicht abhängig: beta, delta, epsilon, p, range, c
@@ -192,9 +192,9 @@ class WilcoxonStop(Stopping):
             case "mae":
                 return mae(p_est, p_val)
             case "mrae":
-                return mrae(p_est, p_val)
+                return mrae(p_est, p_val, eps=1/(2*len(p_est)))
             case "mkld":
-                return mkld(p_est, p_val)
+                return mkld(p_est, p_val, eps=1/(2*len(p_est)))
         
 
     def __call__(self, dataframe):
@@ -262,9 +262,9 @@ class RankingStop(Stopping):
             case "mae":
                 return mae(p_est, p_val)
             case "mrae":
-                return mrae(p_est, p_val)
+                return mrae(p_est, p_val, eps=1/(2*len(p_est)))
             case "mkld":
-                return mkld(p_est, p_val)
+                return mkld(p_est, p_val, eps=1/(2*len(p_est)))
 
     def __call__(self, dataframe):
         if(len(dataframe) == 0):

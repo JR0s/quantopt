@@ -15,6 +15,7 @@ from stopping_instanceSelection import EBGstop
 from stopping_instanceSelection import WilcoxonStop
 from stopping_instanceSelection import BaseSampling
 
+
 # Method to load the specified file for a given quantifier
 def unpack(file, quantifier):
     df = pd.read_csv(file, index_col=0)
@@ -50,9 +51,9 @@ def experiment(data, error, folds, quantifier, n_jobs, batch_size_factor = 0.01,
             case "mae":
                 return qp.error.mae(gdata["p_est"], gdata["p_val"])
             case "mrae":
-                return qp.error.mrae(gdata["p_est"], gdata["p_val"])
+                return qp.error.mrae(gdata["p_est"], gdata["p_val"], eps=1/(2*gdata["val_sample"].nunique()))
             case "mkld":
-                return qp.error.mkld(gdata["p_est"], gdata["p_val"])
+                return qp.error.mkld(gdata["p_est"], gdata["p_val"], eps=1/(2*gdata["val_sample"].nunique()))
             
     # Calculate the error of each configuration for the full data for calculating the differences with the correct error
     error_at_100 = data.groupby(["quantifier", "C", "class_weight"]).apply(compute_error, include_groups=False)
