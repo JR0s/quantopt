@@ -19,15 +19,13 @@ from stopping_instanceSelection import BaseSampling
 from ast import literal_eval
 
 # Method to load the specified file for a given quantifier
-def unpack_data(file):
-    data = pd.read_csv(file, index_col=0)
+def unpack_data(file, quantifier):
+    df = pd.read_csv(file, index_col=0)
+    data = df.loc[df["quantifier"] == quantifier]
     data["p_est"] = data["p_est"].apply(lambda x: np.array(x.strip("[]").split(), dtype=float))
     data["p_val"] = data["p_val"].apply(lambda x: np.array(x.strip("[]").split(), dtype=float))
     # class_weight is saved as na but the hyperparameter has value None (string here, type None leads to errors)
-    data["class_weight"] = data["class_weight"].fillna("None")
-    data["class_weight"] = data["class_weight"].replace("<NA>", "None")
-    #data["class_weight"] = data["class_weight"].where(data["class_weight"].notna(), "None")
-    print(data["class_weight"].isna().sum())
+    data["class_weight"] = data["class_weight"].where(data["class_weight"].notna(), "None")
     return data
 
 def unpack_result(file):
@@ -43,7 +41,7 @@ def unpack_result(file):
     return data
 
 # Method for computing the selected error on the data
-def aggregate(data):
+def aggregate(data,quantifier):
     averaged_best = data.groupby("strategy")[["error@100", "n_evaluations"]].mean().reset_index()
 
     maxs = (data.groupby("strategy", as_index=False)["n_evaluations"].max().rename(columns={"n_evaluations": "max_n"}))
@@ -55,14 +53,14 @@ def aggregate(data):
     averaged_best = averaged_best.merge(maxs, on="strategy")
     averaged_best = averaged_best.merge(mins, on="strategy")
     averaged_best = averaged_best.merge(counts, on="strategy")
-    averaged_best.to_csv(f"accumulated_{error}.csv")
+    averaged_best.to_csv(f"accumulated_{error}_{quantifier}.csv")
     return averaged_best
 
-def evaluate(data, results, error, jobs):
+def evaluate(data, results, error, jobs, quantifier):
 
     n_folds = len(results["fold_nr"].unique())
 
-    agg_res = aggregate(results)
+    agg_res = aggregate(results,quantifier)
     print(agg_res)
 
     def compute_error(gdata):
@@ -78,7 +76,7 @@ def evaluate(data, results, error, jobs):
 
     # for saving the results
     file_time = time.localtime()
-    file_time = str(file_time.tm_year) + "_" + str(file_time.tm_mon) + "_" + str(file_time.tm_mday) + "_" + str(file_time.tm_hour) + "_" + str(file_time.tm_min) + "_" + str(file_time.tm_sec)
+    file_time = quantifier + "_" + str(file_time.tm_year) + "_" + str(file_time.tm_mon) + "_" + str(file_time.tm_mday) + "_" + str(file_time.tm_hour) + "_" + str(file_time.tm_min) + "_" + str(file_time.tm_sec)
 
     # calculate information about the dataset
     n_configurations = len(data[["quantifier", "C", "class_weight"]].drop_duplicates())
@@ -88,8 +86,6 @@ def evaluate(data, results, error, jobs):
    # Calculate the error of each configuration for the full data for calculating the differences with the correct error
     error_at_100 = data.groupby(["quantifier", "C", "class_weight"]).apply(compute_error, include_groups=False)
     error_at_100 = pd.DataFrame(error_at_100, columns=["error"]).reset_index()
-
-    error_at_100.to_csv(f"error@100_{error}")
 
     print(error_at_100.head(126))
     print(len(error_at_100))
@@ -119,7 +115,7 @@ def evaluate(data, results, error, jobs):
     plt.axhline(y = random_min_val, color="gray", linestyle="--")
     plt.xlabel("Percentage of Data")
     plt.ylabel(error + " (@100%)")
-    plt.title("Additional Error\n of selecting other than the best configurations")
+    plt.title(f"Additional Error\n of selecting other than the best configurations\nfor quantifier {quantifier}")
     plt.savefig("plots_percentage_" + file_time + ".png")
     plt.close()
 
@@ -137,8 +133,6 @@ def evaluate(data, results, error, jobs):
     #     plt.savefig("scatter_" + strategy + "_" + quantifier + "_" + file_time + ".png")
     #     plt.close()
 
-
-    print("Print the scatterplots for the strategies...")
     # for strategy in results["strategy"]:
     #     # count identical points
     #     counts = results[results["strategy"] == strategy].groupby(["n_evaluations", "error@100"]).size().reset_index(name="count")
@@ -166,23 +160,25 @@ def evaluate(data, results, error, jobs):
         plt.xlim(0, len(val_samples))
         plt.ticklabel_format(style="plain", axis="y", useOffset=False)
         #plt.ylim(error_at_100["error"].min(), error_at_100["error"].max())
-        plt.title(f"Performance of strategy {strategy}\nfor {n_folds} folds")
+        plt.title(f"Performance of strategy {strategy}\nfor {n_folds} folds\n for quantifier {quantifier}")
         plt.savefig("scatter_" + strategy + "_" + file_time + ".png")
         plt.close()
 
-
-    parallel = Parallel(n_jobs=jobs, prefer="processes")
-    parallel(delayed(plot)(strategy) for strategy in results["strategy"].unique())
-
-
     def scatter(df, strat_name):
+        mean = df["error@100"]
+        keys = list(df["config_counts"].iloc[0].keys())
+        mask = error_at_100.apply(lambda row: (row["quantifier"], row["C"], row["class_weight"]) in keys, axis=1)
+        min_error = (abs(error_at_100.loc[mask, "error"].min()-mean))
+        max_error = (abs(error_at_100.loc[mask, "error"].max()-mean))
+
         plt.figure(figsize=(12, 8))
         plt.grid(alpha=0.4)
         plt.tight_layout(pad=4.0)
-        plt.scatter(df["n_evaluations"], df["error@100"], s=30,c="tab:red",marker="o", alpha=0.7)
+        # plt.errorbar(df["n_evaluations"], df["error@100"],yerr=[min_error, max_error], xerr=[df["min_n"],df["max_n"]] ,fmt="o",color="red", ecolor="black", capsize=4)
+        plt.errorbar(df["n_evaluations"], df["error@100"], fmt="o",color="red", ecolor="black", capsize=4)
         plt.xlabel("Number of evaluations")
         plt.ylabel(error + " (@100%)")
-        plt.title(f"Performance of all strategies\n of {strat_name}")
+        plt.title(f"Performance of all strategies\n of {strat_name}\nfor quantifier {quantifier}")
         plt.savefig("scatter_accumulated_" + strat_name + "_" + error + "_" + file_time + ".png")
         plt.close()
     
@@ -196,6 +192,10 @@ def evaluate(data, results, error, jobs):
     scatter(ranking_s, "RankingStop")
     scatter(wilcoxon_s, "WilcoxonStop")
     scatter(ebg_s, "EBGStop")
+
+    #print("Print the scatterplots for the strategies...")
+    #parallel = Parallel(n_jobs=jobs, prefer="processes")
+    #parallel(delayed(plot)(strategy) for strategy in results["strategy"].unique())
 
     # one scatter plot for all best types
     smallest_random = random_s.loc[random_s["error@100"].idxmin()]
@@ -215,7 +215,7 @@ def evaluate(data, results, error, jobs):
         plt.scatter(xi, yi, s=30,c=colors[i], cmap="viridis",marker="o", alpha=0.7, label=label)
     plt.xlabel("Number of evaluations")
     plt.ylabel(error + " (@100%)")
-    plt.title(f"Best performances for each strategy type")
+    plt.title(f"Best performances for each strategy type\nfor quantifier {quantifier}")
     plt.legend()
     plt.savefig("scatter_best_" + error + "_" + file_time + ".png")
     plt.close()
@@ -224,13 +224,12 @@ def evaluate(data, results, error, jobs):
 # file baseline_2026_7_1_15_40_17_lequa2022_T1B.csv is whole set
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-                    prog='results.py',
+                    prog='results_quantifier.py',
                     description='Evaluate the results and creation of plots',
                     epilog='see other resources')
     parser.add_argument("data_file", help="path to the directory of the saved data", type=str)
-    parser.add_argument("-a", "--acc", help="path to the directory of the evaluation for acc", type=str)
-    parser.add_argument("-p", "--pacc", help="path to the directory of the evaluation for pacc", type=str)
-    parser.add_argument("-s", "--sld", help="path to the directory of the evaluation for sld", type=str)
+    parser.add_argument("-f", "--file", help="path to the directory of the evaluation for quantifier", type=str)
+    parser.add_argument("-q", "--quantifier", help="string for quantifier", type=str)
     parser.add_argument("-e", "--error", help="used error metric", type=str)
     parser.add_argument("-j", "--jobs", help="number of parallel jobs", type=str)
 
@@ -238,21 +237,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print("Running script:" + parser.prog)
     data_name = args.data_file
-    result_acc = args.acc
-    result_pacc = args.pacc
-    result_sld = args.sld
+    result = args.file
+    quantifier = args.quantifier
     error = args.error
     jobs = args.jobs
 
-    res_acc = unpack_result(result_acc)
-    res_pacc = unpack_result(result_pacc)
-    res_sld = unpack_result(result_sld)
-    results = pd.concat([res_acc, res_pacc, res_sld], ignore_index=True)
-
-    stacked = pd.concat([res_acc, res_pacc, res_sld], keys=range(3))
-
-    result = (stacked.groupby(level=1).apply(lambda g: g.loc[g["error@100"].idxmin()]).reset_index(drop=True))
-
-    result.to_csv(f"all_best_{error}.csv")
-    data = unpack_data(data_name)
-    evaluate(data, result, error, jobs)
+    results = unpack_result(result)
+    data = unpack_data(data_name, quantifier)
+    evaluate(data, results, error, jobs, quantifier)
